@@ -6,7 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::{Effect, KeyboardState, MAX_BRIGHTNESS, Rgb};
+use crate::protocol::{
+    DEFAULT_SPEED, Effect, KeyboardState, MAX_BRIGHTNESS, MAX_SPEED, MIN_SPEED, Rgb,
+};
 
 const CONFIG_DIR_NAME: &str = ".huskynext";
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -28,6 +30,7 @@ pub struct Config {
     pub usage_page: Option<u16>,
     pub effect: Option<u8>,
     pub bright: Option<u8>,
+    pub speed: Option<u8>,
     pub r: Option<u8>,
     pub g: Option<u8>,
     pub b: Option<u8>,
@@ -93,6 +96,10 @@ impl Config {
                 .and_then(Effect::from_code)
                 .unwrap_or(defaults.effect),
             brightness: self.bright.unwrap_or(MAX_BRIGHTNESS).min(MAX_BRIGHTNESS),
+            speed: self
+                .speed
+                .unwrap_or(DEFAULT_SPEED)
+                .clamp(MIN_SPEED, MAX_SPEED),
             color: Rgb::new(
                 self.r.unwrap_or(defaults.color.r),
                 self.g.unwrap_or(defaults.color.g),
@@ -104,6 +111,7 @@ impl Config {
     pub fn set_state(&mut self, state: KeyboardState) {
         self.effect = Some(state.effect.code());
         self.bright = Some(state.brightness.min(MAX_BRIGHTNESS));
+        self.speed = Some(state.speed.clamp(MIN_SPEED, MAX_SPEED));
         self.r = Some(state.color.r);
         self.g = Some(state.color.g);
         self.b = Some(state.color.b);
@@ -251,6 +259,7 @@ mod tests {
         assert_eq!(device.interface_number, Some(1));
         assert_eq!(state.effect, Effect::Rainbow);
         assert_eq!(state.brightness, 2);
+        assert_eq!(state.speed, DEFAULT_SPEED);
         assert_eq!(state.color, Rgb::new(255, 87, 51));
     }
 
@@ -259,6 +268,7 @@ mod tests {
         let config = Config {
             effect: Some(0xEE),
             bright: Some(200),
+            speed: Some(200),
             r: Some(1),
             ..Config::default()
         };
@@ -266,6 +276,7 @@ mod tests {
 
         assert_eq!(state.effect, Effect::Static);
         assert_eq!(state.brightness, MAX_BRIGHTNESS);
+        assert_eq!(state.speed, MAX_SPEED);
         assert_eq!(state.color, Rgb::new(1, 255, 255));
     }
 
@@ -277,6 +288,20 @@ mod tests {
             ..Config::default()
         };
         assert!(config.device().is_none());
+    }
+
+    #[test]
+    fn speed_is_clamped_to_valid_range() {
+        let low = Config {
+            speed: Some(0),
+            ..Config::default()
+        };
+        let high = Config {
+            speed: Some(200),
+            ..Config::default()
+        };
+        assert_eq!(low.keyboard_state().speed, MIN_SPEED);
+        assert_eq!(high.keyboard_state().speed, MAX_SPEED);
     }
 
     #[test]
@@ -301,6 +326,7 @@ mod tests {
         config.set_state(KeyboardState {
             effect: Effect::Rainbow,
             brightness: 1,
+            speed: 2,
             color: Rgb::new(1, 2, 3),
         });
         config.save_to(&path).unwrap();

@@ -22,7 +22,8 @@ use crate::color::Hsv;
 use crate::config::{self, Config, DeviceConfig};
 use crate::device::{self, DeviceCandidate, DeviceError};
 use crate::protocol::{
-    CONNECTION_TEST_COLOR, Effect, KeyboardState, MAX_BRIGHTNESS, Rgb, brightness_percent,
+    CONNECTION_TEST_COLOR, DEFAULT_SPEED, Effect, KeyboardState, MAX_BRIGHTNESS, MAX_SPEED,
+    MIN_SPEED, Rgb, brightness_percent,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -121,6 +122,7 @@ enum Message {
     Navigate(Page),
     EffectSelected(Effect),
     BrightnessChanged(u8),
+    SpeedChanged(u8),
     RedChanged(u8),
     GreenChanged(u8),
     BlueChanged(u8),
@@ -514,6 +516,7 @@ impl App {
         let test_state = KeyboardState {
             effect: Effect::Static,
             brightness: MAX_BRIGHTNESS,
+            speed: DEFAULT_SPEED,
             color: CONNECTION_TEST_COLOR,
         };
 
@@ -686,6 +689,10 @@ impl App {
             }
             Message::BrightnessChanged(brightness) => {
                 self.state.brightness = brightness.min(MAX_BRIGHTNESS);
+                self.mark_dirty();
+            }
+            Message::SpeedChanged(speed) => {
+                self.state.speed = speed.clamp(MIN_SPEED, MAX_SPEED);
                 self.mark_dirty();
             }
             Message::RedChanged(value) => {
@@ -1018,6 +1025,51 @@ impl App {
             .align_y(Alignment::Center),
         );
 
+        let speed_card = card(
+            row![
+                column![
+                    text("Velocidade").size(16).font(bold()),
+                    text(format!("Nível {}", self.state.speed))
+                        .size(28)
+                        .font(bold())
+                        .color(C_TEXT),
+                ]
+                .spacing(2)
+                .width(Length::Fixed(120.0)),
+                column![
+                    slider(
+                        MIN_SPEED..=MAX_SPEED,
+                        self.state.speed,
+                        Message::SpeedChanged
+                    )
+                    .step(1u8)
+                    .width(Length::Fill)
+                    .style(|_, status| slider_style(C_ACCENT, status)),
+                    row![
+                        text("1 · lenta").size(10).color(C_MUTED),
+                        Space::new().width(Length::Fill),
+                        text("2").size(10).color(C_MUTED),
+                        Space::new().width(Length::Fill),
+                        text("3").size(10).color(C_MUTED),
+                        Space::new().width(Length::Fill),
+                        text("4").size(10).color(C_MUTED),
+                        Space::new().width(Length::Fill),
+                        text("5 · rápida").size(10).color(C_MUTED),
+                    ],
+                ]
+                .spacing(5)
+                .width(Length::Fill),
+                column![
+                    text("Dica").size(10).color(C_MUTED),
+                    text("Vale para efeitos animados").size(12).color(C_TEXT),
+                ]
+                .spacing(3)
+                .width(Length::Fixed(150.0)),
+            ]
+            .spacing(20)
+            .align_y(Alignment::Center),
+        );
+
         let effect_buttons = effect_grid(self.state.effect);
         let effects_card = card(
             column![
@@ -1071,6 +1123,7 @@ impl App {
         content
             .push(color_card)
             .push(brightness_card)
+            .push(speed_card)
             .push(effects_card)
             .push(actions)
             .into()
@@ -1344,6 +1397,7 @@ impl App {
                 key_value("Tamanho", "64 bytes (1 byte de ID + 63 de payload)"),
                 key_value("Modo", "offset 0x09 · 19 efeitos (0x00–0x12)"),
                 key_value("Brilho", "offset 0x0A · 5 níveis (0x00–0x04)"),
+                key_value("Velocidade", "offset 0x0B · 5 níveis (0x04–0x00; 1=lenta, 5=rápida)"),
                 key_value("Cor", "offsets 0x0E, 0x0F e 0x10 · R, G, B"),
                 key_value("Configuração", config_path),
             ]

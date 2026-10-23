@@ -2,7 +2,9 @@ use std::process::ExitCode;
 
 use huskynext::config;
 use huskynext::device::{self, DeviceCandidate};
-use huskynext::protocol::{CONNECTION_TEST_HEX, Effect, KeyboardState, MAX_BRIGHTNESS, Rgb};
+use huskynext::protocol::{
+    CONNECTION_TEST_HEX, DEFAULT_SPEED, Effect, KeyboardState, MAX_BRIGHTNESS, Rgb,
+};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -108,6 +110,7 @@ fn send_test(color: &str) -> ExitCode {
     let state = KeyboardState {
         effect: Effect::Static,
         brightness: MAX_BRIGHTNESS,
+        speed: DEFAULT_SPEED,
         color,
     };
 

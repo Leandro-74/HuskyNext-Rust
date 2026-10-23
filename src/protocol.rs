@@ -4,11 +4,15 @@ pub const REPORT_ID: u8 = 0x04;
 pub const REPORT_LEN: usize = 64;
 pub const MODE_OFFSET: usize = 9;
 pub const BRIGHT_OFFSET: usize = 10;
+pub const SPEED_OFFSET: usize = 11;
 pub const COLOR_OFFSET_R: usize = 14;
 pub const COLOR_OFFSET_G: usize = 15;
 pub const COLOR_OFFSET_B: usize = 16;
 
 pub const MAX_BRIGHTNESS: u8 = 4;
+pub const MIN_SPEED: u8 = 1;
+pub const MAX_SPEED: u8 = 5;
+pub const DEFAULT_SPEED: u8 = 4;
 
 pub const BASE_REPORT: [u8; REPORT_LEN] = [
     0x04, 0xA1, 0x01, 0x06, 0x38, 0x00, 0x00, 0x55, 0x00, 0x06, 0x04, 0x01, 0x00, 0x00, 0xFF, 0xFF,
@@ -201,6 +205,7 @@ pub enum ColorError {
 pub struct KeyboardState {
     pub effect: Effect,
     pub brightness: u8,
+    pub speed: u8,
     pub color: Rgb,
 }
 
@@ -209,16 +214,18 @@ impl Default for KeyboardState {
         Self {
             effect: Effect::Static,
             brightness: MAX_BRIGHTNESS,
+            speed: DEFAULT_SPEED,
             color: Rgb::WHITE,
         }
     }
 }
 
 impl KeyboardState {
-    pub fn sanitized(effect: u8, brightness: u8, r: u8, g: u8, b: u8) -> Self {
+    pub fn sanitized(effect: u8, brightness: u8, speed: u8, r: u8, g: u8, b: u8) -> Self {
         Self {
             effect: Effect::from_code(effect).unwrap_or_default(),
             brightness: brightness.min(MAX_BRIGHTNESS),
+            speed: speed.clamp(MIN_SPEED, MAX_SPEED),
             color: Rgb::new(r, g, b),
         }
     }
@@ -227,11 +234,23 @@ impl KeyboardState {
         let mut report = BASE_REPORT;
         report[MODE_OFFSET] = self.effect.code();
         report[BRIGHT_OFFSET] = self.brightness.min(MAX_BRIGHTNESS);
+        report[SPEED_OFFSET] = speed_byte(self.speed);
         report[COLOR_OFFSET_R] = self.color.r;
         report[COLOR_OFFSET_G] = self.color.g;
         report[COLOR_OFFSET_B] = self.color.b;
         report
     }
+}
+
+pub const fn speed_byte(level: u8) -> u8 {
+    let level = if level < MIN_SPEED {
+        MIN_SPEED
+    } else if level > MAX_SPEED {
+        MAX_SPEED
+    } else {
+        level
+    };
+    MAX_SPEED - level
 }
 
 pub fn brightness_percent(level: u8) -> u8 {
@@ -252,10 +271,22 @@ mod tests {
         assert_eq!(BASE_REPORT[0], REPORT_ID);
         assert_eq!(BASE_REPORT[MODE_OFFSET], Effect::Static.code());
         assert_eq!(BASE_REPORT[BRIGHT_OFFSET], MAX_BRIGHTNESS);
+        assert_eq!(BASE_REPORT[SPEED_OFFSET], speed_byte(DEFAULT_SPEED));
         assert_eq!(
             &BASE_REPORT[COLOR_OFFSET_R..=COLOR_OFFSET_B],
             &[0xFF, 0xFF, 0xFF]
         );
+    }
+
+    #[test]
+    fn speed_levels_map_to_reverse_bytes() {
+        assert_eq!(speed_byte(MIN_SPEED), 0x04);
+        assert_eq!(speed_byte(2), 0x03);
+        assert_eq!(speed_byte(3), 0x02);
+        assert_eq!(speed_byte(4), 0x01);
+        assert_eq!(speed_byte(MAX_SPEED), 0x00);
+        assert_eq!(speed_byte(0), speed_byte(MIN_SPEED));
+        assert_eq!(speed_byte(200), speed_byte(MAX_SPEED));
     }
 
     #[test]
@@ -268,12 +299,14 @@ mod tests {
         let state = KeyboardState {
             effect: Effect::Rainbow,
             brightness: 2,
+            speed: 5,
             color: Rgb::new(0xFF, 0x57, 0x33),
         };
         let report = state.report();
 
         assert_eq!(report[MODE_OFFSET], 0x0D);
         assert_eq!(report[BRIGHT_OFFSET], 0x02);
+        assert_eq!(report[SPEED_OFFSET], 0x00);
         assert_eq!(report[COLOR_OFFSET_R], 0xFF);
         assert_eq!(report[COLOR_OFFSET_G], 0x57);
         assert_eq!(report[COLOR_OFFSET_B], 0x33);
@@ -300,9 +333,10 @@ mod tests {
 
     #[test]
     fn sanitization_clamps_invalid_values() {
-        let state = KeyboardState::sanitized(0xFE, 99, 1, 2, 3);
+        let state = KeyboardState::sanitized(0xFE, 99, 0, 1, 2, 3);
         assert_eq!(state.effect, Effect::Static);
         assert_eq!(state.brightness, MAX_BRIGHTNESS);
+        assert_eq!(state.speed, MIN_SPEED);
         assert_eq!(state.color, Rgb::new(1, 2, 3));
     }
 
