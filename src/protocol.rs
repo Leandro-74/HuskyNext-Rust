@@ -188,6 +188,9 @@ impl Default for Rgb {
     }
 }
 
+pub const CONNECTION_TEST_COLOR: Rgb = Rgb::new(0x88, 0x35, 0xE9);
+pub const CONNECTION_TEST_HEX: &str = "8835E9";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ColorError {
     #[error("Cor inválida. Use seis dígitos hexadecimais, como FF5733 ou #FF5733.")]

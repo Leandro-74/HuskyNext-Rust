@@ -31,8 +31,8 @@ arquivo de configuração, mas com interface gráfica e várias correções:
   a interface ou o `usage_page` salvos estiverem desatualizados.
 - Valores inválidos do JSON são saneados antes de qualquer envio.
 - Configuração gravada de forma atômica, com permissões `0600` no Linux.
-- O teste de identificação envia **vermelho estático a 100%** de verdade, em vez
-  de perguntar se ficou vermelho enquanto enviava branco.
+- O teste de identificação envia **roxo (#8835E9) estático a 100%** de verdade,
+  em vez de perguntar se mudou de cor enquanto enviava outra.
 - O dispositivo é redescoberto a cada envio; desconectar e reconectar não exige
   reiniciar o programa.
 - Falhas de escrita e de permissão aparecem na interface, com instruções de
@@ -89,7 +89,7 @@ sudo udevadm trigger
 Na primeira execução, abra a página **Conexão**:
 
 1. Clique em **Detectar novamente**, se necessário.
-2. Use **Testar** para enviar vermelho estático a 100%. Se a luz mudar, o
+2. Use **Testar** para enviar roxo (#8835E9) estático a 100%. Se a luz mudar, o
    dispositivo correto é aquele.
 3. Clique em **Usar este dispositivo** para salvar VID, PID, interface e
    `usage_page` em `~/.huskynext/config.json`.
@@ -115,7 +115,7 @@ já usava o projeto anterior mantém o mesmo arquivo.
 
 ```bash
 huskynext --list          # lista os dispositivos HID detectados
-huskynext --test 00FF88   # envia cor estática a 100% (padrão: FF0000)
+huskynext --test 00FF88   # envia cor estática a 100% (padrão: 8835E9)
 huskynext --help
 ```
 

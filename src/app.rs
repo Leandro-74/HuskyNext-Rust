@@ -21,7 +21,9 @@ use iced::{
 use crate::color::Hsv;
 use crate::config::{self, Config, DeviceConfig};
 use crate::device::{self, DeviceCandidate, DeviceError};
-use crate::protocol::{Effect, KeyboardState, MAX_BRIGHTNESS, Rgb, brightness_percent};
+use crate::protocol::{
+    CONNECTION_TEST_COLOR, Effect, KeyboardState, MAX_BRIGHTNESS, Rgb, brightness_percent,
+};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -512,7 +514,7 @@ impl App {
         let test_state = KeyboardState {
             effect: Effect::Static,
             brightness: MAX_BRIGHTNESS,
-            color: Rgb::new(0xFF, 0x00, 0x00),
+            color: CONNECTION_TEST_COLOR,
         };
 
         match device::write_to_candidate(&candidate, &test_state.report()) {
@@ -521,8 +523,9 @@ impl App {
                 self.notice = Some(
                     Notice::success("Teste enviado")
                         .with_detail(format!(
-                            "{sent} bytes enviados para {}. A luz ficou vermelha? Se sim, use “Usar este dispositivo”.",
-                            candidate.display_name()
+                            "{sent} bytes enviados para {}. A luz ficou roxa ({})? Se sim, use “Usar este dispositivo”.",
+                            candidate.display_name(),
+                            CONNECTION_TEST_COLOR.to_hex()
                         )),
                 );
             }
@@ -1103,7 +1106,7 @@ impl App {
                     .align_y(Alignment::Center),
                     text(candidate.ids()).size(12).color(C_MUTED),
                     row![
-                        button(text("Testar luz vermelha").size(12))
+                        button(text("Testar luz roxa").size(12))
                             .padding([8, 12])
                             .style(secondary_button)
                             .on_press(Message::TestDevice(candidate.path.clone())),
@@ -1353,7 +1356,7 @@ impl App {
                 bullet("A configuração é gravada de forma atômica, com permissões restritas ao usuário."),
                 bullet("Valores inválidos do arquivo são saneados antes de qualquer envio."),
                 bullet("O dispositivo é redescoberto a cada envio; IDs ou interface antigos não impedem a reconexão."),
-                bullet("O teste de identificação envia vermelho estático a 100%, em vez de prometer vermelho e enviar branco."),
+                bullet("O teste de identificação envia roxo (#8835E9) estático a 100%, em vez de prometer uma cor e enviar outra."),
                 bullet("A regra udev recomendada usa TAG+=\"uaccess\" em vez de liberar o dispositivo para todos com MODE=\"0666\"."),
             ]
             .spacing(7),

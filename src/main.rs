@@ -2,7 +2,7 @@ use std::process::ExitCode;
 
 use huskynext::config;
 use huskynext::device::{self, DeviceCandidate};
-use huskynext::protocol::{Effect, KeyboardState, MAX_BRIGHTNESS, Rgb};
+use huskynext::protocol::{CONNECTION_TEST_HEX, Effect, KeyboardState, MAX_BRIGHTNESS, Rgb};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -26,7 +26,7 @@ fn main() -> ExitCode {
             .get(index + 1)
             .filter(|value| !value.starts_with('-'))
             .map(String::as_str)
-            .unwrap_or("FF0000");
+            .unwrap_or(CONNECTION_TEST_HEX);
         return send_test(color);
     }
 
@@ -160,7 +160,7 @@ fn print_help() {
 Uso:
   huskynext                 Abre a interface gráfica iced
   huskynext --list          Lista os dispositivos HID detectados
-  huskynext --test [HEX]    Envia cor estática a 100% (padrão FF0000)
+  huskynext --test [HEX]    Envia cor estática a 100% (padrão 8835E9)
   huskynext --version       Mostra a versão
   huskynext --help          Mostra esta ajuda
 
