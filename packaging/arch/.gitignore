@@ -1,0 +1,5 @@
+# Artefatos gerados pelo makepkg
+src/
+pkg/
+huskynext-*.tar.gz
+*.pkg.tar.*
