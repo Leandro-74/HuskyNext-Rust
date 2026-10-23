@@ -20,7 +20,7 @@ Esta é uma reescrita completa, com a mesma compatibilidade de protocolo e de
 arquivo de configuração, mas com interface gráfica e várias correções:
 
 - Interface iced com seletor de cor (quadrado de saturação/brilho e barra de
-  matiz), canais RGB, brilho e os 19 efeitos.
+  matiz), canais RGB, brilho, velocidade dos efeitos e os 19 efeitos.
 - As alterações são aplicadas automaticamente no teclado. No seletor de cor, o
   envio acontece somente ao soltar o mouse; nos demais controles, o limite é de
   cerca de 8 envios por segundo. O estado final sempre é enviado, e a
@@ -100,6 +100,7 @@ Na página **Iluminação**:
   inferior, digite um HEX (`#FF5733` ou `FF5733`), use os canais R/G/B ou os
   atalhos de cor.
 - **Brilho**: cinco níveis de 0% a 100%.
+- **Velocidade**: cinco níveis, de 1 (mais lenta) a 5 (mais rápida); o padrão é 4.
 - **Efeitos**: os 19 modos do protocolo.
 - **Aplicação automática**: no quadrado/barra de matiz, a cor só é enviada
   quando você solta o mouse. Brilho, efeitos, HEX e canais RGB usam um limite de
@@ -133,6 +134,7 @@ O resumo completo está em [PROTOCOL.md](PROTOCOL.md). Em resumo:
 | Tamanho | 64 bytes (ID + 63 de payload) |
 | Modo | offset `0x09`, `0x00`–`0x12` |
 | Brilho | offset `0x0A`, `0x00`–`0x04` |
+| Velocidade | offset `0x0B`, `0x04`–`0x00` (1=lenta, 5=rápida) |
 | Cor | offsets `0x0E`, `0x0F`, `0x10` (R, G, B) |
 
 Cada envio carrega o estado completo. O teclado não responde nem fornece leitura
@@ -146,7 +148,7 @@ src/
 ├── app.rs        # interface iced, navegação e fluxo de configuração
 ├── config.rs     # leitura/gravação atômica de ~/.huskynext/config.json
 ├── device.rs     # enumeração HID, descoberta e escrita do report
-└── protocol.rs   # efeitos, brilho, cor, montagem e testes do report
+└── protocol.rs   # efeitos, brilho, velocidade, cor, montagem e testes do report
 ```
 
 A pasta local `HuskyNext/` contém a implementação Python original, mantida como

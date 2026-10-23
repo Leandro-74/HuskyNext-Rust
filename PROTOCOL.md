@@ -18,7 +18,7 @@ correspondem ao que está implementado em `src/`.
 | Report ID | `0x04` |
 | Tamanho do relatório | 64 bytes (incluindo o Report ID) |
 | Byte order | Little-endian |
-| Estado | Cada relatório carrega o estado completo (modo + brilho + RGB) |
+| Estado | Cada relatório carrega o estado completo (modo + brilho + velocidade + RGB) |
 
 A comunicação é feita com a biblioteca `hidapi` (`hid.device.write()`), sem
 leitura de respostas (o dispositivo não envia `GET_REPORT`/input reports neste
@@ -58,6 +58,7 @@ Após confirmação no assistente, a conexão é salva em
   "usage_page": 65280,
   "effect": 6,
   "bright": 4,
+  "speed": 4,
   "r": 255,
   "g": 255,
   "b": 255
@@ -89,11 +90,13 @@ offset  20 ... 3F
 | `0x00` | Report ID | `0x04` fixo | `0x04` |
 | `0x09` | Modo/efeito | `0x00`–`0x12` (ver tabela) | `0x06` (Estático) |
 | `0x0A` | Brilho | `0x00`–`0x04` (0–100%) | `0x04` (100%) |
+| `0x0B` | Velocidade | `0x00`–`0x04` (5=rápida … 1=lenta) | `0x01` (nível 4) |
 | `0x0E` | Canal R | `0x00`–`0xFF` | `0xFF` |
 | `0x0F` | Canal G | `0x00`–`0xFF` | `0xFF` |
 | `0x10` | Canal B | `0x00`–`0xFF` | `0xFF` |
 
-Constantes correspondentes em `src/colors.py:17`:
+Constantes correspondentes em `src/colors.py:17` (o offset de velocidade foi
+identificado depois, por teste no teclado, e não existe na versão Python):
 
 ```python
 MODE_OFFSET     = 9   # 0x09
@@ -103,11 +106,13 @@ COLOR_OFFSET_G  = 15  # 0x0F
 COLOR_OFFSET_B  = 16  # 0x10
 ```
 
-Os demais bytes (`0x01`–`0x08`, `0x0B`–`0x0D`, `0x11`–`0x3F`) permanecem
+Na implementação Rust, `SPEED_OFFSET = 11` (`0x0B`).
+
+Os demais bytes (`0x01`–`0x08`, `0x0C`–`0x0D`, `0x11`–`0x3F`) permanecem
 constantes no protocolo implementado:
 
 ```
-A1 01 06 38 00 00 55 00 | 01 00 00 | 00...
+A1 01 06 38 00 00 55 00 00 <modo> <brilho> <velocidade> 00 00 <R> <G> <B> 00...
 ```
 
 ## 4. Modos de iluminação
@@ -149,7 +154,25 @@ O brilho usa uma escala de 5 níveis, codificada de `0x00` a `0x04`
 | 4 | `0x03` | 75% |
 | 5 | `0x04` | 100% |
 
-## 6. Cor
+## 6. Velocidade
+
+A velocidade usa 5 níveis no offset `0x0B`, mas o valor enviado é invertido em
+relação ao rótulo da interface:
+
+| Nível | Byte (`0x0B`) | Comportamento |
+| --- | --- | --- |
+| 1 | `0x04` | Mais lenta |
+| 2 | `0x03` | Lenta |
+| 3 | `0x02` | Média |
+| 4 | `0x01` | Rápida (padrão) |
+| 5 | `0x00` | Mais rápida |
+
+O valor `0x01` do relatório base corresponde, portanto, ao nível 4. Antes desta
+função, qualquer alteração enviava `0x01` fixo e o teclado voltava para a
+velocidade 4. A velocidade só tem efeito visível em modos animados; em
+Estático e Desligado ela fica armazenada para o próximo efeito.
+
+## 7. Cor
 
 A cor é informada em HEX no formato `RRGGBB` ou `#RRGGBB`
 (`src/colors.py:53`) e dividida em três bytes independentes:
@@ -158,12 +181,13 @@ A cor é informada em HEX no formato `RRGGBB` ou `#RRGGBB`
 FF5733  ->  R = 0xFF, G = 0x57, B = 0x33
 ```
 
-Cada alteração reenvia o relatório completo, preservando o modo e o brilho
-atuais. O mesmo vale para mudanças de modo e brilho, que preservam a cor. O
-estado é mantido em `KeyboardState` (`src/colors.py:45`), cujo padrão é
-Estático (`0x06`), 100% (`0x04`) e branco (`0xFF,0xFF,0xFF`).
+Cada alteração reenvia o relatório completo, preservando o modo, o brilho e a
+velocidade atuais. O mesmo vale para mudanças de modo, brilho e velocidade, que
+preservam a cor. O estado é mantido em `KeyboardState` (`src/colors.py:45`),
+cujo padrão é Estático (`0x06`), 100% (`0x04`), velocidade 4 (`0x01`) e branco
+(`0xFF,0xFF,0xFF`).
 
-## 7. Sequência de envio
+## 8. Sequência de envio
 
 ```
 host                                   teclado
@@ -184,35 +208,44 @@ Fluxo implementado (`src/cli.py:17`):
 O valor retornado por `write()` é o número de bytes efetivamente escritos e é
 exibido na CLI.
 
-## 8. Exemplos de relatório
+## 9. Exemplos de relatório
 
-Estado padrão — Estático, 100%, branco:
+Estado padrão — Estático, 100%, velocidade 4, branco:
 
 ```
 04 A1 01 06 38 00 00 55 00 06 04 01 00 00 FF FF FF 00 ... 00
 ```
 
-Cor `FF5733` com modo Estático e 100%:
+Cor `FF5733` com modo Estático, 100% e velocidade 4:
 
 ```
 04 A1 01 06 38 00 00 55 00 06 04 01 00 00 FF 57 33 00 ... 00
 ```
 
-Arco-íris (`0x0D`) com 50% de brilho:
+Arco-íris (`0x0D`) com 50% de brilho e velocidade 5 (mais rápida):
 
 ```
-04 A1 01 06 38 00 00 55 00 0D 02 01 00 00 FF FF FF 00 ... 00
+04 A1 01 06 38 00 00 55 00 0D 02 00 00 00 FF FF FF 00 ... 00
 ```
 
-Desligado (`0x00`), 0%, mantendo a cor:
+Arco-íris (`0x0D`) com 50% de brilho e velocidade 1 (mais lenta):
+
+```
+04 A1 01 06 38 00 00 55 00 0D 02 04 00 00 FF FF FF 00 ... 00
+```
+
+Desligado (`0x00`), 0%, velocidade 4, mantendo a cor:
 
 ```
 04 A1 01 06 38 00 00 55 00 00 00 01 00 00 FF FF FF 00 ... 00
 ```
 
-## 9. Observações e limitações
+## 10. Observações e limitações
 
 - O protocolo é somente de escrita; não há handshake nem leitura de estado.
+- O byte de velocidade (`0x0B`) foi identificado por teste no teclado; os
+  valores são invertidos em relação ao nível exibido (`0x04` = nível 1,
+  `0x00` = nível 5).
 - O assistente de teste (`src/setup_wizard.py:37`) envia o estado padrão
   (branco, Estático, 100%), embora a pergunta ao usuário mencione vermelho.
 - No Linux, o acesso exige regras `udev` para `usb` e `hidraw` (ver README);
