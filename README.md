@@ -50,20 +50,56 @@ arquivo de configuração, mas com interface gráfica e várias correções:
 O `hidapi` é compilado junto com o backend `hidraw`; não é necessário instalar a
 biblioteca do sistema.
 
-## Compilar e executar
+## Instalação
+
+Clone o repositório:
+
+```bash
+git clone https://github.com/Leandro-74/HuskyNext-Rust.git
+cd HuskyNext-Rust
+```
+
+### Arch Linux (pacote)
+
+O `PKGBUILD` em `packaging/arch` compila e instala o binário, o atalho no
+menu, o ícone e a regra `udev` com `TAG+="uaccess"`:
+
+```bash
+cd packaging/arch
+makepkg -si
+```
+
+É necessário ter o grupo de pacotes `base-devel` instalado; `makepkg -s` instala
+as dependências de compilação (`cargo`, `rust` e `pkgconf`). A fonte é fixada
+em um commit no `PKGBUILD`; ao publicar uma nova versão, atualize `pkgver`,
+`_commit` e `sha256sums`.
+
+### Compilar e instalar manualmente
+
+Em qualquer distro Linux com Rust 1.88 ou superior. Além do Rust, o build
+precisa de `pkg-config` (ou `pkgconf`) e dos headers do `libudev` (no Arch,
+`systemd-libs`):
 
 ```bash
 cargo build --release
-./target/release/huskynext
+sudo install -Dm755 target/release/huskynext /usr/local/bin/huskynext
 ```
 
-Para desenvolvimento:
+Para executar sem instalar, use `./target/release/huskynext`.
+
+### Desenvolvimento
 
 ```bash
 cargo run
 ```
 
+Depois da instalação, configure a permissão de acesso ao teclado em
+**Permissão no Linux**, abaixo.
+
 ### Permissão no Linux
+
+O pacote Arch já instala a regra em `/usr/lib/udev/rules.d/`; os passos abaixo
+são para instalações manuais ou outras distros.
 
 Sem uma regra `udev`, o acesso a `/dev/hidraw*` pode ser negado. Crie
 `/etc/udev/rules.d/99-huskynext.rules` com o conteúdo abaixo (ajuste VID/PID se
