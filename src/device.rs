@@ -68,6 +68,10 @@ pub enum DeviceError {
         "O teclado configurado não foi encontrado. Verifique a conexão ou detecte os dispositivos novamente."
     )]
     NotFound,
+    #[error(
+        "O teclado configurado {vendor_id:04X}:{product_id:04X} não foi encontrado. Use --list para inspecionar os dispositivos HID."
+    )]
+    SavedDeviceNotFound { vendor_id: u16, product_id: u16 },
     #[error("Sem permissão para acessar o dispositivo {vendor_id:04X}:{product_id:04X}. {details}")]
     Permission {
         vendor_id: u16,
@@ -210,6 +214,42 @@ pub fn find_candidate(
 
     pool.sort_by_key(|candidate| !candidate.vendor_specific);
     pool.first().copied()
+}
+
+pub fn default_candidate(candidates: &[DeviceCandidate]) -> Option<&DeviceCandidate> {
+    candidates
+        .iter()
+        .find(|candidate| {
+            candidate.vendor_specific
+                && (candidate
+                    .manufacturer
+                    .as_deref()
+                    .is_some_and(|value| value.to_lowercase().contains("sonix"))
+                    || candidate
+                        .product
+                        .as_deref()
+                        .is_some_and(|value| value.to_lowercase().contains("sled")))
+        })
+        .or_else(|| {
+            candidates
+                .iter()
+                .find(|candidate| candidate.vendor_specific)
+        })
+}
+
+pub fn select_for_test(
+    candidates: &[DeviceCandidate],
+    saved: Option<DeviceConfig>,
+) -> Result<&DeviceCandidate, DeviceError> {
+    match saved {
+        Some(config) => {
+            find_candidate(candidates, config).ok_or(DeviceError::SavedDeviceNotFound {
+                vendor_id: config.vendor_id,
+                product_id: config.product_id,
+            })
+        }
+        None => default_candidate(candidates).ok_or(DeviceError::NotFound),
+    }
 }
 
 pub fn write_to_candidate(
@@ -452,5 +492,67 @@ mod tests {
         };
         let found = find_candidate(&candidates, config).unwrap();
         assert!(found.vendor_specific);
+    }
+
+    #[test]
+    fn select_for_test_uses_saved_device() {
+        let candidates = [candidate(false, 1, 0x0001), candidate(true, 2, 0xFF1C)];
+        let saved = DeviceConfig {
+            vendor_id: 0x0C45,
+            product_id: 0x8501,
+            interface_number: Some(1),
+            usage_page: Some(0x0001),
+        };
+        let found = select_for_test(&candidates, Some(saved)).unwrap();
+        assert_eq!(found.interface_number, 1);
+        assert!(!found.vendor_specific);
+    }
+
+    #[test]
+    fn select_for_test_fails_when_saved_device_is_missing() {
+        let candidates = [candidate(true, 1, 0xFF1C)];
+        let saved = DeviceConfig {
+            vendor_id: 0x1234,
+            product_id: 0x5678,
+            interface_number: Some(1),
+            usage_page: Some(0xFF00),
+        };
+        match select_for_test(&candidates, Some(saved)) {
+            Err(DeviceError::SavedDeviceNotFound {
+                vendor_id,
+                product_id,
+            }) => {
+                assert_eq!(vendor_id, 0x1234);
+                assert_eq!(product_id, 0x5678);
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn select_for_test_prefers_sonix_or_sled_without_config() {
+        let mut other = candidate(true, 1, 0xFF1C);
+        other.manufacturer = Some("Other".into());
+        other.product = Some("Keyboard".into());
+        let sonix = candidate(true, 2, 0xFF1C);
+        let candidates = [other, sonix];
+        let found = select_for_test(&candidates, None).unwrap();
+        assert_eq!(found.manufacturer.as_deref(), Some("SONiX"));
+    }
+
+    #[test]
+    fn select_for_test_without_candidates_returns_not_found() {
+        assert!(matches!(
+            select_for_test(&[], None),
+            Err(DeviceError::NotFound)
+        ));
+    }
+
+    #[test]
+    fn default_candidate_prefers_vendor_specific() {
+        let candidates = [candidate(false, 1, 0x0001), candidate(true, 2, 0xFF1C)];
+        let found = default_candidate(&candidates).unwrap();
+        assert!(found.vendor_specific);
+        assert_eq!(found.interface_number, 2);
     }
 }
