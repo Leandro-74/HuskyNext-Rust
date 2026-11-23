@@ -18,10 +18,8 @@ pub struct DeviceCandidate {
     pub product_id: u16,
     pub interface_number: i32,
     pub usage_page: u16,
-    pub usage: u16,
     pub manufacturer: Option<String>,
     pub product: Option<String>,
-    pub serial_number: Option<String>,
     pub vendor_specific: bool,
 }
 
@@ -141,7 +139,6 @@ pub fn discover() -> Result<Vec<DeviceCandidate>, DeviceError> {
         let product_id = info.product_id();
         let interface_number = info.interface_number();
         let usage_page = info.usage_page();
-        let usage = info.usage();
 
         let vendor_specific = is_vendor_usage_page(usage_page)
             || descriptors
@@ -154,10 +151,8 @@ pub fn discover() -> Result<Vec<DeviceCandidate>, DeviceError> {
             product_id,
             interface_number,
             usage_page,
-            usage,
             manufacturer: clean_string(info.manufacturer_string()),
             product: clean_string(info.product_string()),
-            serial_number: clean_string(info.serial_number()),
             vendor_specific,
         };
 
@@ -449,10 +444,8 @@ mod tests {
             product_id: 0x8501,
             interface_number,
             usage_page,
-            usage: 0x92,
             manufacturer: Some("SONiX".into()),
             product: Some("USB DEVICE".into()),
-            serial_number: None,
             vendor_specific,
         }
     }
