@@ -99,6 +99,22 @@ impl DeviceError {
             _ => None,
         }
     }
+
+    /// Returns true when the error may mean that the cached device path is out
+    /// of date and a new discovery could fix it.
+    pub fn is_stale(&self) -> bool {
+        match self {
+            Self::NotFound => true,
+            Self::Open(message) | Self::Write(message) => {
+                let lower = message.to_lowercase();
+                lower.contains("no such file")
+                    || lower.contains("no such device")
+                    || lower.contains("device not found")
+                    || lower.contains("broken pipe")
+            }
+            _ => false,
+        }
+    }
 }
 
 pub fn permission_hint(vendor_id: u16, product_id: u16) -> String {
@@ -283,12 +299,12 @@ pub fn write_to_candidate(
     Ok(sent)
 }
 
-pub fn send_state(
+pub fn send_state_with_candidates(
+    candidates: &[DeviceCandidate],
     config: DeviceConfig,
     state: KeyboardState,
 ) -> Result<(usize, DeviceCandidate), DeviceError> {
-    let candidates = discover()?;
-    let candidate = find_candidate(&candidates, config).ok_or(DeviceError::NotFound)?;
+    let candidate = find_candidate(candidates, config).ok_or(DeviceError::NotFound)?;
     let sent = write_to_candidate(candidate, &state.report())?;
     Ok((sent, candidate.clone()))
 }

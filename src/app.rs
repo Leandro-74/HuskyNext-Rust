@@ -313,6 +313,20 @@ impl App {
         }
     }
 
+    fn send_current_state(
+        &mut self,
+        saved: DeviceConfig,
+    ) -> Result<(usize, DeviceCandidate), DeviceError> {
+        match device::send_state_with_candidates(&self.candidates, saved, self.state) {
+            Ok(result) => Ok(result),
+            Err(error) if error.is_stale() => {
+                self.candidates = device::discover()?;
+                device::send_state_with_candidates(&self.candidates, saved, self.state)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn apply(&mut self, manual: bool) {
         if manual && !self.sync_hex_input() {
             self.notice = Some(
@@ -336,7 +350,7 @@ impl App {
             return;
         };
 
-        match device::send_state(saved, self.state) {
+        match self.send_current_state(saved) {
             Ok((sent, candidate)) => {
                 self.dirty = false;
                 self.auto_apply_paused = false;
