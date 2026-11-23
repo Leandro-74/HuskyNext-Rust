@@ -1,0 +1,3 @@
+# Husky Sled (Sonix 0C45:8501): allow the active session to access the device.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="8501", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0c45", ATTRS{idProduct}=="8501", TAG+="uaccess"

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=HuskyNext
+Comment=Control the lighting of the Husky Sled keyboard
+Exec=huskynext
+Icon=huskynext
+Terminal=false
+Categories=Utility;Settings;
+StartupWMClass=huskynext
