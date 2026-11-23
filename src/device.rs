@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use hidapi::{HidApi, HidError};
 
 use crate::config::DeviceConfig;
-use crate::protocol::{KeyboardState, REPORT_LEN};
+use crate::protocol::{KeyboardState, REPORT_ID, REPORT_LEN};
 
 pub const VENDOR_USAGE_PAGE_MIN: u16 = 0xFF00;
 pub const VENDOR_USAGE_PAGE_MAX: u16 = 0xFFFF;
@@ -84,6 +84,8 @@ pub enum DeviceError {
     Write(String),
     #[error("Envio incompleto: apenas {sent} de {expected} bytes foram escritos.")]
     Incomplete { sent: usize, expected: usize },
+    #[error("Relatório inválido: esperado Report ID 0x{expected:02X}, encontrado 0x{found:02X}.")]
+    InvalidReport { expected: u8, found: u8 },
     #[error("O caminho do dispositivo HID contém um byte inválido.")]
     InvalidPath,
 }
@@ -276,6 +278,13 @@ pub fn write_to_candidate(
         return Err(DeviceError::Incomplete {
             sent: report.len(),
             expected: REPORT_LEN,
+        });
+    }
+
+    if report[0] != REPORT_ID {
+        return Err(DeviceError::InvalidReport {
+            expected: REPORT_ID,
+            found: report[0],
         });
     }
 
