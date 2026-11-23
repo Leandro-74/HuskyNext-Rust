@@ -1,8 +1,8 @@
-<h1 align="center">HuskyNext</h1>
-
 <p align="center">
   <img src="assets/logo.png" alt="HuskyNext logo" width="120">
 </p>
+
+<h1 align="center">HuskyNext</h1>
 
 <p align="center">
   Control the lighting of the <b>Husky Sled</b> keyboard on Linux with a native Rust and iced interface, without the official Windows-only software.
