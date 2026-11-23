@@ -1,61 +1,57 @@
-# Protocolo HuskyNext
+# HuskyNext Protocol
 
-Documento técnico do protocolo USB HID usado pelo HuskyNext para controlar a
-iluminação do teclado **Husky Sled**. As informações abaixo foram obtidas por
-engenharia reversa (captura com Wireshark/USBPcap do software oficial) e
-correspondem ao que está implementado em `src/`.
+Technical description of the USB HID protocol used by HuskyNext to control the lighting of the **Husky Sled** keyboard. The information was obtained through reverse engineering of the USB traffic and matches the Rust implementation in this repository.
 
-> ⚠️ Protocolo não-oficial, sem vínculo com a Husky. Pode variar entre modelos e
-> revisões de firmware.
+> ⚠️ Unofficial protocol, with no affiliation with Husky. It may vary between models and firmware revisions.
 
-## 1. Visão geral
+## 1. Overview
 
-| Item | Valor |
+| Item | Value |
 | --- | --- |
-| Barramento | USB HID |
-| Direção | Host → dispositivo (apenas escrita) |
-| Tipo de relatório | Output (`SET_REPORT`) |
+| Bus | USB HID |
+| Direction | Host to device (write only) |
+| Report type | Output (`SET_REPORT`) |
 | Report ID | `0x04` |
-| Tamanho do relatório | 64 bytes (incluindo o Report ID) |
+| Report size | 64 bytes (including the Report ID) |
 | Byte order | Little-endian |
-| Estado | Cada relatório carrega o estado completo (modo + brilho + velocidade + RGB) |
+| State | Every report carries the complete state (effect + brightness + speed + RGB) |
 
-A comunicação é feita com a biblioteca `hidapi` (`hid.device.write()`), sem
-leitura de respostas (o dispositivo não envia `GET_REPORT`/input reports neste
-protocolo). Ver `src/device.py:126`.
+The application talks to the device through `hidapi` with `write` only. The keyboard does not send input reports or responses for this protocol. The implementation is in `src/device.rs` and `src/protocol.rs`.
 
-## 2. Identificação do dispositivo
+## 2. Device identification
 
-O teclado expõe várias interfaces/collections HID. A interface de controle de
-iluminação é identificada por um **Usage Page vendor-specific** no intervalo
-`0xFF00`–`0xFFFF` (`src/device.py:6`).
+The keyboard exposes several HID interfaces and collections. The lighting control interface is identified by a **vendor-specific Usage Page** in the range `0xFF00`–`0xFFFF`.
 
-A descoberta funciona assim (`src/device.py:67`):
+Discovery works like this (`src/device.rs`):
 
-1. Enumera os dispositivos HID com `hid.enumerate()`.
-2. Considera candidato qualquer dispositivo cujo `usage_page` esteja em
-   `0xFF00`–`0xFFFF`.
-3. No Linux, complementa a detecção lendo os report descriptors em
-   `/sys/class/hidraw/*/device/report_descriptor` e procurando um item
-   `Usage Page` vendor-specific no descritor (`src/device.py:16`).
-4. Remove duplicatas pela chave `(vendor_id, product_id, interface_number)`.
-5. Se nenhum candidato vendor-specific existir, usa a lista completa de
-   dispositivos como fallback.
+1. Enumerate the HID devices with `hidapi`.
+2. Treat a device as a candidate when its `usage_page` is in `0xFF00`–`0xFFFF`.
+3. On Linux, also read the report descriptors from `/sys/class/hidraw/*/device/report_descriptor` and look for a vendor-specific Usage Page in the descriptor.
+4. Group duplicates by path, interface number, vendor ID and product ID. When two entries share the same key, keep the vendor-specific one and, between vendor-specific entries, the one with the higher Usage Page.
+5. Sort the list with vendor-specific devices first, then by display name, IDs, interface and path.
 
-O descritor é interpretado item a item: itens longos (`0xFE`) são pulados e o
-item de tag `0x04` (`Usage Page`) tem seu valor lido em little-endian.
+The descriptor is read item by item. Long items (`0xFE`) are skipped, and the `Usage Page` tag (`0x04`) is read as a little-endian value.
 
-### Dados persistidos
+### Selection
 
-Após confirmação no assistente, a conexão é salva em
-`~/.huskynext/config.json`:
+`find_candidate` filters the candidates by vendor ID and product ID. It then applies the saved interface number and the saved Usage Page only when they still match at least one candidate. A stale interface or Usage Page therefore does not block a device that still matches the IDs.
+
+Within the filtered pool, a vendor-specific candidate is preferred.
+
+When no device is saved, `default_candidate` prefers a vendor-specific device whose manufacturer contains `sonix` or whose product contains `sled`. If none matches, it takes the first vendor-specific device.
+
+The `--test` command uses `select_for_test`. When a device is saved, the saved device must be found. The command fails with `SavedDeviceNotFound` instead of sending to another device. The default selection applies only when no device is saved.
+
+### Persisted data
+
+After confirmation in the interface, the connection is saved in `~/.huskynext/config.json`:
 
 ```json
 {
   "vendor_id": 3141,
   "product_id": 34049,
   "interface_number": 1,
-  "usage_page": 65280,
+  "usage_page": 65308,
   "effect": 6,
   "bright": 4,
   "speed": 4,
@@ -65,16 +61,22 @@ Após confirmação no assistente, a conexão é salva em
 }
 ```
 
-A abertura do dispositivo filtra por `vendor_id` + `product_id` +
-`interface_number` e, se disponível, por `usage_page`
-(`src/device.py:93`).
+The decimal values above correspond to `0C45`, `8501` and `0xFF1C`. The interface number and the Usage Page are optional. The lighting state uses `effect`, `bright`, `speed`, `r`, `g` and `b`.
 
-## 3. Formato do relatório
+The configuration module (`src/config.rs`) treats the file as a flat JSON object:
 
-O relatório tem 64 bytes. O primeiro byte é o Report ID (`0x04`) e os demais
-formam o payload. O pacote base está em `src/colors.py:6`:
+- Missing fields and `null` values fall back to safe defaults.
+- Empty fields are omitted when saving. A configuration with no device and no lighting values is written as `{}`.
+- The file is written atomically and receives `0600` permissions on Linux.
+- Invalid values are sanitized before any send. An unknown effect becomes **Static**, brightness is limited to `0x00`–`0x04` and speed is limited to levels 1–5.
 
-```
+**Forget device** clears `vendor_id`, `product_id`, `interface_number` and `usage_page`, and preserves the lighting state. A new device overwrites all four link fields, even when its interface or Usage Page is absent. After a forget, the file contains only the lighting state.
+
+## 3. Report format
+
+The report has 64 bytes. The first byte is the Report ID (`0x04`) and the remaining 63 bytes form the payload. The base report is `BASE_REPORT` in `src/protocol.rs`:
+
+```text
 offset  00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
         04 A1 01 06 38 00 00 55 00 06 04 01 00 00 FF FF
 offset  10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F
@@ -83,173 +85,180 @@ offset  20 ... 3F
         00 ... 00
 ```
 
-### Campos variáveis
+### Variable fields
 
-| Offset | Campo | Valores | Padrão |
+| Offset | Field | Values | Default |
 | --- | --- | --- | --- |
-| `0x00` | Report ID | `0x04` fixo | `0x04` |
-| `0x09` | Modo/efeito | `0x00`–`0x12` (ver tabela) | `0x06` (Estático) |
-| `0x0A` | Brilho | `0x00`–`0x04` (0–100%) | `0x04` (100%) |
-| `0x0B` | Velocidade | `0x00`–`0x04` (5=rápida … 1=lenta) | `0x01` (nível 4) |
-| `0x0E` | Canal R | `0x00`–`0xFF` | `0xFF` |
-| `0x0F` | Canal G | `0x00`–`0xFF` | `0xFF` |
-| `0x10` | Canal B | `0x00`–`0xFF` | `0xFF` |
+| `0x00` | Report ID | fixed `0x04` | `0x04` |
+| `0x09` | Effect | `0x00`–`0x12` (see table) | `0x06` (Static) |
+| `0x0A` | Brightness | `0x00`–`0x04` (0–100%) | `0x04` (100%) |
+| `0x0B` | Speed | `0x00`–`0x04` (5=fast … 1=slow) | `0x01` (level 4) |
+| `0x0E` | R channel | `0x00`–`0xFF` | `0xFF` |
+| `0x0F` | G channel | `0x00`–`0xFF` | `0xFF` |
+| `0x10` | B channel | `0x00`–`0xFF` | `0xFF` |
 
-Constantes correspondentes em `src/colors.py:17` (o offset de velocidade foi
-identificado depois, por teste no teclado, e não existe na versão Python):
+Constants in `src/protocol.rs`:
 
-```python
-MODE_OFFSET     = 9   # 0x09
-BRIGHT_OFFSET   = 10  # 0x0A
-COLOR_OFFSET_R  = 14  # 0x0E
-COLOR_OFFSET_G  = 15  # 0x0F
-COLOR_OFFSET_B  = 16  # 0x10
+```rust
+pub const REPORT_ID: u8 = 0x04;
+pub const REPORT_LEN: usize = 64;
+pub const MODE_OFFSET: usize = 9;     // 0x09
+pub const BRIGHT_OFFSET: usize = 10;  // 0x0A
+pub const SPEED_OFFSET: usize = 11;   // 0x0B
+pub const COLOR_OFFSET_R: usize = 14; // 0x0E
+pub const COLOR_OFFSET_G: usize = 15; // 0x0F
+pub const COLOR_OFFSET_B: usize = 16; // 0x10
 ```
 
-Na implementação Rust, `SPEED_OFFSET = 11` (`0x0B`).
+The other bytes (`0x01`–`0x08`, `0x0C`–`0x0D`, `0x11`–`0x3F`) stay constant in the implemented protocol:
 
-Os demais bytes (`0x01`–`0x08`, `0x0C`–`0x0D`, `0x11`–`0x3F`) permanecem
-constantes no protocolo implementado:
-
-```
-A1 01 06 38 00 00 55 00 00 <modo> <brilho> <velocidade> 00 00 <R> <G> <B> 00...
+```text
+A1 01 06 38 00 00 55 00 <effect> <brightness> <speed> 00 00 <R> <G> <B> 00...
 ```
 
-## 4. Modos de iluminação
+Before opening the device, `write_to_candidate` checks the report length and the Report ID. A short report returns `Incomplete`, and a wrong Report ID returns `InvalidReport`. Both checks run before `hidapi` opens the device.
 
-Valores aceitos no offset `0x09` (`src/colors.py:23`):
+## 4. Lighting effects
 
-| Código | Modo |
+Values accepted at offset `0x09`. The labels match the interface and `Effect::label()` in `src/protocol.rs`:
+
+| Code | Effect |
 | --- | --- |
-| `0x00` | Desligado |
-| `0x01` | Onda |
-| `0x02` | Persianas |
-| `0x03` | Difusão |
-| `0x04` | Néon |
-| `0x05` | Respiração |
-| `0x06` | Estático |
-| `0x07` | Reativo |
-| `0x08` | Gota de Chuva |
-| `0x09` | Reativa por Linha |
-| `0x0A` | Iluminado por Estrelas |
-| `0x0B` | Flores em Flor |
-| `0x0C` | Cascata |
-| `0x0D` | Arco-íris |
-| `0x0E` | Desenho Animado |
-| `0x0F` | Cena de Chuva |
-| `0x10` | Escaneamento |
+| `0x00` | Off |
+| `0x01` | Wave |
+| `0x02` | Blinds |
+| `0x03` | Diffusion |
+| `0x04` | Neon |
+| `0x05` | Breathing |
+| `0x06` | Static |
+| `0x07` | Reactive |
+| `0x08` | Raindrop |
+| `0x09` | Line Reactive |
+| `0x0A` | Starry |
+| `0x0B` | Blooming |
+| `0x0C` | Cascade |
+| `0x0D` | Rainbow |
+| `0x0E` | Cartoon |
+| `0x0F` | Rain Scene |
+| `0x10` | Scan |
 | `0x11` | Single Off |
-| `0x12` | Fluxo |
+| `0x12` | Flow |
 
-## 5. Brilho
+`Effect::ALL` contains the 19 effects in this order. `Effect::from_code` maps an unknown code to `None`, and the configuration sanitization then falls back to **Static**.
 
-O brilho usa uma escala de 5 níveis, codificada de `0x00` a `0x04`
-(`src/cli.py:51`):
+## 5. Brightness
 
-| Menu | Byte (`0x0A`) | Percentual |
+Brightness uses five levels at offset `0x0A`:
+
+| Level | Byte (`0x0A`) | Percentage |
 | --- | --- | --- |
-| 1 | `0x00` | 0% |
-| 2 | `0x01` | 25% |
-| 3 | `0x02` | 50% |
-| 4 | `0x03` | 75% |
-| 5 | `0x04` | 100% |
+| 0 | `0x00` | 0% |
+| 1 | `0x01` | 25% |
+| 2 | `0x02` | 50% |
+| 3 | `0x03` | 75% |
+| 4 | `0x04` | 100% |
 
-## 6. Velocidade
+`MAX_BRIGHTNESS` is `4`. `brightness_percent` returns `level.min(4) * 25`.
 
-A velocidade usa 5 níveis no offset `0x0B`, mas o valor enviado é invertido em
-relação ao rótulo da interface:
+## 6. Speed
 
-| Nível | Byte (`0x0B`) | Comportamento |
+Speed uses five levels at offset `0x0B`, but the byte is inverted relative to the interface level:
+
+| Level | Byte (`0x0B`) | Behavior |
 | --- | --- | --- |
-| 1 | `0x04` | Mais lenta |
-| 2 | `0x03` | Lenta |
-| 3 | `0x02` | Média |
-| 4 | `0x01` | Rápida (padrão) |
-| 5 | `0x00` | Mais rápida |
+| 1 | `0x04` | Slowest |
+| 2 | `0x03` | Slow |
+| 3 | `0x02` | Medium |
+| 4 | `0x01` | Fast (default) |
+| 5 | `0x00` | Fastest |
 
-O valor `0x01` do relatório base corresponde, portanto, ao nível 4. Antes desta
-função, qualquer alteração enviava `0x01` fixo e o teclado voltava para a
-velocidade 4. A velocidade só tem efeito visível em modos animados; em
-Estático e Desligado ela fica armazenada para o próximo efeito.
+`speed_byte` clamps the level to the range `1`–`5` and returns `5 - level`. The base report value `0x01` therefore corresponds to level 4, which is `DEFAULT_SPEED`.
 
-## 7. Cor
+Speed is visible in animated effects. In **Static** and **Off**, it is stored for the next animated effect.
 
-A cor é informada em HEX no formato `RRGGBB` ou `#RRGGBB`
-(`src/colors.py:53`) e dividida em três bytes independentes:
+## 7. Color
 
-```
+The color is stored as three independent bytes on offsets `0x0E`, `0x0F` and `0x10`. The interface accepts HEX in the `RRGGBB` or `#RRGGBB` format, with optional surrounding spaces and either letter case:
+
+```text
 FF5733  ->  R = 0xFF, G = 0x57, B = 0x33
 ```
 
-Cada alteração reenvia o relatório completo, preservando o modo, o brilho e a
-velocidade atuais. O mesmo vale para mudanças de modo, brilho e velocidade, que
-preservam a cor. O estado é mantido em `KeyboardState` (`src/colors.py:45`),
-cujo padrão é Estático (`0x06`), 100% (`0x04`), velocidade 4 (`0x01`) e branco
-(`0xFF,0xFF,0xFF`).
+`Rgb::from_hex` rejects values that are not exactly six hexadecimal digits. `Rgb::to_hex` formats the color as uppercase `#RRGGBB`.
 
-## 8. Sequência de envio
+Every change resends the complete report and preserves the current effect, brightness and speed. Changes to effect, brightness and speed preserve the color. The state lives in `KeyboardState`, whose default is **Static** (`0x06`), 100% (`0x04`), speed level 4 (`0x01`) and white (`0xFF, 0xFF, 0xFF`).
 
-```
-host                                   teclado
+`KeyboardState::sanitized` applies the same limits used when loading the configuration: invalid effect to **Static**, brightness to `0x00`–`0x04` and speed to levels 1–5.
+
+## 8. Send sequence
+
+```text
+host                                   keyboard
   |  SET_REPORT (Report ID 0x04, 64 B)    |
   |-------------------------------------->|
-  |  (sem resposta)                        |
+  |  (no response)                        |
 ```
 
-Fluxo implementado (`src/cli.py:17`):
+The application flow (`src/app.rs` and `src/device.rs`):
 
-1. Localiza o caminho HID pela configuração salva.
-2. Abre o dispositivo (`hid.device.open_path`).
-3. Monta os 64 bytes a partir do estado atual.
-4. Envia com `hid.device.write(report)`.
-5. Fecha o dispositivo.
-6. Salva o novo estado em `~/.huskynext/config.json`.
+1. Load the configuration and sanitize the lighting state.
+2. Discover the devices once and keep the candidate list in memory.
+3. Resolve the candidate from the saved vendor ID and product ID.
+4. Build the 64 bytes from the current state with `KeyboardState::report()`.
+5. Validate the report length and the Report ID.
+6. Open the HID path with `hidapi` and write the report.
+7. Close the device.
+8. Update the configuration and save it after the changes stop.
 
-O valor retornado por `write()` é o número de bytes efetivamente escritos e é
-exibido na CLI.
+A normal send reuses the cached candidates and does not enumerate the HID bus again. If the path is stale, the application discovers the devices once and retries the send. Permission errors are not treated as stale paths and do not enter this cycle.
 
-## 9. Exemplos de relatório
+The graphical interface applies changes automatically with a timer of 120 ms, which gives about 8 sends per second. The color picker sends only when the mouse is released. The configuration is saved after a pause of about 450 ms without changes, or immediately after a manual apply.
 
-Estado padrão — Estático, 100%, velocidade 4, branco:
+The `--test` command follows a shorter path: it discovers the devices, resolves the target, builds a static report and writes it directly with `write_to_candidate`. It never saves the test color.
 
-```
+## 9. Report examples
+
+Default state: **Static**, 100%, speed level 4, white:
+
+```text
 04 A1 01 06 38 00 00 55 00 06 04 01 00 00 FF FF FF 00 ... 00
 ```
 
-Cor `FF5733` com modo Estático, 100% e velocidade 4:
+Color `FF5733` with **Static**, 100% and speed level 4:
 
-```
+```text
 04 A1 01 06 38 00 00 55 00 06 04 01 00 00 FF 57 33 00 ... 00
 ```
 
-Arco-íris (`0x0D`) com 50% de brilho e velocidade 5 (mais rápida):
+**Rainbow** (`0x0D`) with 50% brightness and speed level 5 (fastest):
 
-```
+```text
 04 A1 01 06 38 00 00 55 00 0D 02 00 00 00 FF FF FF 00 ... 00
 ```
 
-Arco-íris (`0x0D`) com 50% de brilho e velocidade 1 (mais lenta):
+**Rainbow** (`0x0D`) with 50% brightness and speed level 1 (slowest):
 
-```
+```text
 04 A1 01 06 38 00 00 55 00 0D 02 04 00 00 FF FF FF 00 ... 00
 ```
 
-Desligado (`0x00`), 0%, velocidade 4, mantendo a cor:
+**Off** (`0x00`), 0%, speed level 4, keeping the color:
 
-```
+```text
 04 A1 01 06 38 00 00 55 00 00 00 01 00 00 FF FF FF 00 ... 00
 ```
 
-## 10. Observações e limitações
+Identification test: **Static**, 100%, speed level 4, purple `#8835E9`:
 
-- O protocolo é somente de escrita; não há handshake nem leitura de estado.
-- O byte de velocidade (`0x0B`) foi identificado por teste no teclado; os
-  valores são invertidos em relação ao nível exibido (`0x04` = nível 1,
-  `0x00` = nível 5).
-- O assistente de teste (`src/setup_wizard.py:37`) envia o estado padrão
-  (branco, Estático, 100%), embora a pergunta ao usuário mencione vermelho.
-- No Linux, o acesso exige regras `udev` para `usb` e `hidraw` (ver README);
-  sem permissão, a abertura do dispositivo falha com `EACCES`/`EPERM`.
-- O número de bytes fixos e os offsets podem variar em outros modelos/revisões
-  do controlador; a identificação por Usage Page vendor-specific é a principal
-  heurística de compatibilidade.
+```text
+04 A1 01 06 38 00 00 55 00 06 04 01 00 00 88 35 E9 00 ... 00
+```
+
+## 10. Limitations
+
+- The protocol is write only. There is no handshake and no way to read the current state of the keyboard.
+- The identification test sends static purple `#8835E9` at 100%, which matches the text shown in the interface.
+- The speed byte (`0x0B`) is inverted relative to the displayed level: `0x04` is level 1 and `0x00` is level 5.
+- The constants were confirmed on a Sonix controller with IDs `0C45:8501`. Other models or firmware revisions may use different offsets, report sizes or IDs.
+- Access on Linux requires udev rules for the `usb` and `hidraw` subsystems. Without permission, opening the device fails with `EACCES` or `EPERM`. The interface shows a udev hint for permission errors only.
+- There is no support for profiles, macros or custom effects.
