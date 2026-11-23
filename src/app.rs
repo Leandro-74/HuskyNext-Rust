@@ -2172,7 +2172,10 @@ fn input_style(error: bool) -> impl Fn(&Theme, InputStatus) -> InputStyle {
             icon: C_MUTED,
             placeholder: C_MUTED,
             value: C_TEXT,
-            selection: Color::from_rgba8(255, 90, 54, 0.35),
+            selection: Color {
+                a: 0.35,
+                ..C_ACCENT
+            },
         }
     }
 }
