@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.1.0] - 2026-11-23
 
+First public release.
+
 ### Added
 
 - Native desktop interface built with iced.
@@ -35,3 +37,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Device reports are validated before the device is opened, including the report length and the Report ID.
 - Invalid configuration values are sanitized before any send.
 - Permission errors are reported with a udev hint and do not cause repeated rediscovery.
+
+### Notes
+
+- Linux only, with Wayland or X11.
+- Distributed as source; build with Rust 1.88 or newer.
+- The protocol was obtained through reverse engineering and may vary between models and firmware revisions.
