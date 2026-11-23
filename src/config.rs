@@ -603,6 +603,20 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn saved_config_has_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (dir, path) = temp_config_path();
+        Config::default().save_to(&path).unwrap();
+
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn save_is_atomic_and_round_trips() {
         let dir = std::env::temp_dir().join(format!(
