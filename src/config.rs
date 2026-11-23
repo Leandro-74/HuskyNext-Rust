@@ -214,6 +214,10 @@ pub fn load() -> LoadResult {
         };
     };
 
+    load_from(&path)
+}
+
+pub fn load_from(path: &Path) -> LoadResult {
     if !path.exists() {
         return LoadResult {
             config: Config::default(),
@@ -221,7 +225,7 @@ pub fn load() -> LoadResult {
         };
     }
 
-    match fs::read(&path) {
+    match fs::read(path) {
         Ok(bytes) => match serde_json::from_slice::<Config>(&bytes) {
             Ok(config) => LoadResult {
                 config,
@@ -497,6 +501,106 @@ mod tests {
         ));
         let path = dir.join("config.json");
         (dir, path)
+    }
+
+    fn write_temp_config(raw: &str) -> (PathBuf, PathBuf) {
+        let (dir, path) = temp_config_path();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(&path, raw).unwrap();
+        (dir, path)
+    }
+
+    #[test]
+    fn load_from_missing_file_returns_default_without_warning() {
+        let (dir, path) = temp_config_path();
+        let loaded = load_from(&path);
+
+        assert!(loaded.warning.is_none());
+        assert!(loaded.config.device().is_none());
+        assert_eq!(loaded.config.keyboard_state(), KeyboardState::default());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_from_invalid_json_returns_default_with_warning() {
+        let (dir, path) = write_temp_config("{ not valid json");
+        let loaded = load_from(&path);
+
+        assert!(loaded.warning.is_some());
+        assert!(loaded.config.device().is_none());
+        assert_eq!(loaded.config.keyboard_state(), KeyboardState::default());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_from_empty_object_returns_default_without_warning() {
+        let (dir, path) = write_temp_config("{}");
+        let loaded = load_from(&path);
+
+        assert!(loaded.warning.is_none());
+        assert!(loaded.config.device().is_none());
+        assert_eq!(loaded.config.keyboard_state(), KeyboardState::default());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_from_legacy_config_loads_values() {
+        let (dir, path) = write_temp_config(
+            r##"{
+                "vendor_id": 3141,
+                "product_id": 34049,
+                "interface_number": 1,
+                "usage_page": 65280,
+                "effect": 13,
+                "bright": 2,
+                "r": 255,
+                "g": 87,
+                "b": 51
+            }"##,
+        );
+        let loaded = load_from(&path);
+
+        assert!(loaded.warning.is_none());
+        let device = loaded.config.device().unwrap();
+        assert_eq!(device.vendor_id, 0x0C45);
+        assert_eq!(device.product_id, 0x8501);
+        assert_eq!(device.interface_number, Some(1));
+        assert_eq!(device.usage_page, Some(0xFF00));
+
+        let state = loaded.config.keyboard_state();
+        assert_eq!(state.effect, Effect::Rainbow);
+        assert_eq!(state.brightness, 2);
+        assert_eq!(state.color, Rgb::new(255, 87, 51));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_from_nulls_fall_back_to_defaults() {
+        let (dir, path) = write_temp_config(
+            r##"{
+                "vendor_id": null,
+                "product_id": null,
+                "interface_number": null,
+                "usage_page": null,
+                "effect": null,
+                "bright": null,
+                "speed": null,
+                "r": null,
+                "g": null,
+                "b": null
+            }"##,
+        );
+        let loaded = load_from(&path);
+
+        assert!(loaded.warning.is_none());
+        assert!(loaded.config.device().is_none());
+        assert_eq!(loaded.config.keyboard_state(), KeyboardState::default());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
