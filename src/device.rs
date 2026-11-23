@@ -29,7 +29,7 @@ impl DeviceCandidate {
             .product
             .as_deref()
             .filter(|value| !value.trim().is_empty())
-            .unwrap_or("Dispositivo HID");
+            .unwrap_or("HID device");
         let manufacturer = self
             .manufacturer
             .as_deref()
@@ -60,31 +60,31 @@ impl DeviceCandidate {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DeviceError {
-    #[error("Não foi possível inicializar o acesso HID: {0}")]
+    #[error("Could not initialize HID access: {0}")]
     Initialization(String),
     #[error(
-        "O teclado configurado não foi encontrado. Verifique a conexão ou detecte os dispositivos novamente."
+        "The configured keyboard was not found. Check the connection or detect the devices again."
     )]
     NotFound,
     #[error(
-        "O teclado configurado {vendor_id:04X}:{product_id:04X} não foi encontrado. Use --list para inspecionar os dispositivos HID."
+        "The configured keyboard {vendor_id:04X}:{product_id:04X} was not found. Use --list to inspect the HID devices."
     )]
     SavedDeviceNotFound { vendor_id: u16, product_id: u16 },
-    #[error("Sem permissão para acessar o dispositivo {vendor_id:04X}:{product_id:04X}. {details}")]
+    #[error("No permission to access device {vendor_id:04X}:{product_id:04X}. {details}")]
     Permission {
         vendor_id: u16,
         product_id: u16,
         details: String,
     },
-    #[error("Falha ao abrir o dispositivo HID: {0}")]
+    #[error("Failed to open the HID device: {0}")]
     Open(String),
-    #[error("Falha ao enviar o relatório HID: {0}")]
+    #[error("Failed to send the HID report: {0}")]
     Write(String),
-    #[error("Envio incompleto: apenas {sent} de {expected} bytes foram escritos.")]
+    #[error("Incomplete send: only {sent} of {expected} bytes were written.")]
     Incomplete { sent: usize, expected: usize },
-    #[error("Relatório inválido: esperado Report ID 0x{expected:02X}, encontrado 0x{found:02X}.")]
+    #[error("Invalid report: expected Report ID 0x{expected:02X}, found 0x{found:02X}.")]
     InvalidReport { expected: u8, found: u8 },
-    #[error("O caminho do dispositivo HID contém um byte inválido.")]
+    #[error("The HID device path contains an invalid byte.")]
     InvalidPath,
 }
 
@@ -119,11 +119,11 @@ impl DeviceError {
 
 pub fn permission_hint(vendor_id: u16, product_id: u16) -> String {
     format!(
-        "No Linux, crie /etc/udev/rules.d/99-huskynext.rules com:\n\
+        "On Linux, create /etc/udev/rules.d/99-huskynext.rules with:\n\
          SUBSYSTEM==\"usb\", ATTRS{{idVendor}}==\"{vendor_id:04x}\", ATTRS{{idProduct}}==\"{product_id:04x}\", TAG+=\"uaccess\"\n\
          SUBSYSTEM==\"hidraw\", ATTRS{{idVendor}}==\"{vendor_id:04x}\", ATTRS{{idProduct}}==\"{product_id:04x}\", TAG+=\"uaccess\"\n\
-         Depois execute: sudo udevadm control --reload-rules && sudo udevadm trigger\n\
-         Por fim, reconecte o teclado. O TAG uaccess libera o acesso apenas para o usuário da sessão ativa."
+         Then run: sudo udevadm control --reload-rules && sudo udevadm trigger\n\
+         Finally, reconnect the keyboard. The uaccess tag grants access only to the active session user."
     )
 }
 

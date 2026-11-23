@@ -23,7 +23,7 @@ fn main() -> ExitCode {
         Ok(Command::Gui) => match huskynext::app::run() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
-                eprintln!("Falha ao abrir a interface: {error}");
+                eprintln!("Failed to open the interface: {error}");
                 ExitCode::FAILURE
             }
         },
@@ -67,7 +67,7 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
     }
 
     if !args.is_empty() {
-        return Err(format!("Argumento desconhecido: {}", args.join(" ")));
+        return Err(format!("Unknown argument: {}", args.join(" ")));
     }
 
     Ok(Command::Gui)
@@ -77,7 +77,7 @@ fn list_devices() -> ExitCode {
     match device::discover() {
         Ok(candidates) => {
             if candidates.is_empty() {
-                println!("Nenhum dispositivo HID encontrado.");
+                println!("No HID devices found.");
             } else {
                 for (index, candidate) in candidates.iter().enumerate() {
                     println!(
@@ -88,7 +88,7 @@ fn list_devices() -> ExitCode {
                         if candidate.vendor_specific {
                             "vendor-specific"
                         } else {
-                            "outro HID"
+                            "other HID"
                         },
                         candidate.path
                     );
@@ -97,7 +97,7 @@ fn list_devices() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("Falha ao enumerar dispositivos: {error}");
+            eprintln!("Failed to enumerate devices: {error}");
             ExitCode::FAILURE
         }
     }
@@ -115,7 +115,7 @@ fn send_test(color: &str) -> ExitCode {
     let candidates = match device::discover() {
         Ok(candidates) => candidates,
         Err(error) => {
-            eprintln!("Falha ao enumerar dispositivos: {error}");
+            eprintln!("Failed to enumerate devices: {error}");
             return ExitCode::FAILURE;
         }
     };
@@ -148,7 +148,7 @@ fn send_test(color: &str) -> ExitCode {
     match device::write_to_candidate(candidate, &state.report()) {
         Ok(sent) => {
             println!(
-                "{sent} bytes enviados para {} ({}) com cor {}.",
+                "{sent} bytes sent to {} ({}) with color {}.",
                 candidate.display_name(),
                 candidate.ids(),
                 color.to_hex()
@@ -170,19 +170,19 @@ fn print_help() {
     println!(
         "HuskyNext {version}
 
-Uso:
-  huskynext                 Abre a interface gráfica iced
-  huskynext --list          Lista os dispositivos HID detectados
-  huskynext --test [HEX]    Envia cor estática a 100% (padrão 8835E9)
-  huskynext --version       Mostra a versão
-  huskynext --help          Mostra esta ajuda
+Usage:
+  huskynext                 Opens the iced graphical interface
+  huskynext --list          Lists detected HID devices
+  huskynext --test [HEX]    Sends a static color at 100% (default 8835E9)
+  huskynext --version       Shows the version
+  huskynext --help          Shows this help
 
-Exemplos:
+Examples:
   huskynext --test 00FF88
   huskynext --list
 
-Sem --test, o dispositivo salvo em ~/.huskynext/config.json é usado.
-A configuração e o protocolo não são oficiais e podem variar por firmware.",
+Without --test, the device saved in ~/.huskynext/config.json is used.
+The configuration and protocol are unofficial and may vary by firmware.",
         version = env!("CARGO_PKG_VERSION")
     );
 }
@@ -245,7 +245,7 @@ mod tests {
     fn parse_args_rejects_unknown_arguments() {
         assert_eq!(
             parse_args(&args(&["--bogus"])),
-            Err("Argumento desconhecido: --bogus".to_string())
+            Err("Unknown argument: --bogus".to_string())
         );
     }
 

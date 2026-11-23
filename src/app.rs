@@ -181,8 +181,7 @@ impl App {
             Ok(candidates) => candidates,
             Err(error) => {
                 notice = Some(
-                    Notice::error("Falha ao detectar dispositivos HID")
-                        .with_detail(error.to_string()),
+                    Notice::error("Failed to detect HID devices").with_detail(error.to_string()),
                 );
                 Vec::new()
             }
@@ -197,8 +196,8 @@ impl App {
             && notice.is_none()
         {
             notice = Some(
-                Notice::warning("Teclado configurado não encontrado").with_detail(format!(
-                    "Procurei por {:04X}:{:04X}. Verifique se o teclado está conectado ou use a página Conexão.",
+                Notice::warning("Configured keyboard not found").with_detail(format!(
+                    "Searched for {:04X}:{:04X}. Check that the keyboard is connected or use the Connection page.",
                     saved.vendor_id, saved.product_id
                 )),
             );
@@ -330,10 +329,10 @@ impl App {
     fn apply(&mut self, manual: bool) {
         if manual && !self.sync_hex_input() {
             self.notice = Some(
-                Notice::error("Cor inválida").with_detail(
+                Notice::error("Invalid color").with_detail(
                     self.hex_error
                         .clone()
-                        .unwrap_or_else(|| "Use o formato RRGGBB.".to_string()),
+                        .unwrap_or_else(|| "Use the RRGGBB format.".to_string()),
                 ),
             );
             return;
@@ -343,8 +342,8 @@ impl App {
             if manual {
                 self.page = Page::Connection;
                 self.notice = Some(
-                    Notice::warning("Nenhum teclado configurado")
-                        .with_detail("Escolha o dispositivo de iluminação na página Conexão."),
+                    Notice::warning("No keyboard configured")
+                        .with_detail("Choose the lighting device on the Connection page."),
                 );
             }
             return;
@@ -363,12 +362,12 @@ impl App {
                     self.save_ready_at = None;
                     let save_error = self.config.save().err();
                     self.notice = Some(match save_error {
-                        Some(error) => Notice::warning("Iluminação enviada, mas não foi salva")
+                        Some(error) => Notice::warning("Lighting sent, but not saved")
                             .with_detail(format!(
-                                "O teclado recebeu {sent} bytes, porém a configuração não pôde ser gravada: {error}"
+                                "The keyboard received {sent} bytes, but the configuration could not be written: {error}"
                             )),
-                        None => Notice::success("Iluminação aplicada").with_detail(format!(
-                            "{sent} bytes enviados para {}.",
+                        None => Notice::success("Lighting applied").with_detail(format!(
+                            "{sent} bytes sent to {}.",
                             candidate.display_name()
                         )),
                     });
@@ -389,10 +388,7 @@ impl App {
             Err(error) => {
                 self.dirty = true;
                 if manual {
-                    self.notice = Some(device_error_notice(
-                        "Não foi possível aplicar a iluminação",
-                        &error,
-                    ));
+                    self.notice = Some(device_error_notice("Could not apply the lighting", &error));
                     if matches!(
                         error,
                         DeviceError::NotFound | DeviceError::Permission { .. }
@@ -403,10 +399,8 @@ impl App {
                     self.auto_apply_paused = true;
                     self.pending_save = false;
                     self.save_ready_at = None;
-                    self.notice = Some(device_error_notice(
-                        "Falha ao aplicar automaticamente",
-                        &error,
-                    ));
+                    self.notice =
+                        Some(device_error_notice("Failed to apply automatically", &error));
                 }
             }
         }
@@ -442,8 +436,8 @@ impl App {
 
         if let Err(error) = self.config.save() {
             self.notice = Some(
-                Notice::warning("Configuração não salva").with_detail(format!(
-                    "A iluminação foi aplicada, mas o arquivo não pôde ser gravado: {error}"
+                Notice::warning("Configuration not saved").with_detail(format!(
+                    "The lighting was applied, but the file could not be written: {error}"
                 )),
             );
         }
@@ -481,20 +475,17 @@ impl App {
                     saved.and_then(|saved| device::find_candidate(&self.candidates, saved));
 
                 self.notice = Some(match (saved, current) {
-                    (Some(_), Some(_)) => Notice::success("Dispositivos atualizados")
-                        .with_detail("O teclado configurado foi encontrado."),
-                    (Some(_), None) => Notice::warning("Teclado configurado não encontrado")
-                        .with_detail("Outros dispositivos HID podem estar disponíveis na lista."),
-                    (None, _) => Notice::info("Dispositivos atualizados").with_detail(format!(
-                        "{} dispositivo(s) HID encontrado(s).",
-                        self.candidates.len()
-                    )),
+                    (Some(_), Some(_)) => Notice::success("Devices updated")
+                        .with_detail("The configured keyboard was found."),
+                    (Some(_), None) => Notice::warning("Configured keyboard not found")
+                        .with_detail("Other HID devices may be available in the list."),
+                    (None, _) => Notice::info("Devices updated")
+                        .with_detail(format!("{} HID device(s) found.", self.candidates.len())),
                 });
             }
             Err(error) => {
-                self.notice = Some(
-                    Notice::error("Falha ao detectar dispositivos").with_detail(error.to_string()),
-                );
+                self.notice =
+                    Some(Notice::error("Failed to detect devices").with_detail(error.to_string()));
             }
         }
     }
@@ -506,7 +497,7 @@ impl App {
             .find(|candidate| candidate.path == path)
             .cloned()
         else {
-            self.notice = Some(Notice::error("Dispositivo não está mais na lista"));
+            self.notice = Some(Notice::error("Device is no longer in the list"));
             return;
         };
 
@@ -520,16 +511,16 @@ impl App {
         match device::write_to_candidate(&candidate, &test_state.report()) {
             Ok(sent) => {
                 self.notice = Some(
-                    Notice::success("Teste enviado")
+                    Notice::success("Test sent")
                         .with_detail(format!(
-                            "{sent} bytes enviados para {}. A luz ficou roxa ({})? Se sim, use “Usar este dispositivo”.",
+                            "{sent} bytes sent to {}. Did the light turn purple ({})? If so, use “Use this device”.",
                             candidate.display_name(),
                             CONNECTION_TEST_COLOR.to_hex()
                         )),
                 );
             }
             Err(error) => {
-                self.notice = Some(device_error_notice("Falha no teste", &error));
+                self.notice = Some(device_error_notice("Test failed", &error));
             }
         }
     }
@@ -541,7 +532,7 @@ impl App {
             .find(|candidate| candidate.path == path)
             .cloned()
         else {
-            self.notice = Some(Notice::error("Dispositivo não está mais na lista"));
+            self.notice = Some(Notice::error("Device is no longer in the list"));
             return;
         };
 
@@ -562,21 +553,18 @@ impl App {
 
                 let save_error = self.config.save().err();
                 self.notice = Some(match save_error {
-                    Some(error) => Notice::warning("Dispositivo conectado, mas não salvo")
+                    Some(error) => Notice::warning("Device connected, but not saved")
                         .with_detail(format!(
-                            "O teclado recebeu {sent} bytes, porém a configuração não pôde ser gravada: {error}"
+                            "The keyboard received {sent} bytes, but the configuration could not be written: {error}"
                         )),
-                    None => Notice::success("Teclado configurado").with_detail(format!(
-                        "{} — {sent} bytes enviados.",
+                    None => Notice::success("Keyboard configured").with_detail(format!(
+                        "{} — {sent} bytes sent.",
                         candidate.display_name()
                     )),
                 });
             }
             Err(error) => {
-                self.notice = Some(device_error_notice(
-                    "Não foi possível usar este dispositivo",
-                    &error,
-                ));
+                self.notice = Some(device_error_notice("Could not use this device", &error));
             }
         }
     }
@@ -591,13 +579,14 @@ impl App {
         match self.config.save() {
             Ok(()) => {
                 self.page = Page::Connection;
-                self.notice = Some(Notice::info("Dispositivo esquecido").with_detail(
-                    "Escolha outro dispositivo na lista ou informe os IDs manualmente.",
-                ));
+                self.notice =
+                    Some(Notice::info("Device forgotten").with_detail(
+                        "Choose another device from the list or enter the IDs manually.",
+                    ));
             }
             Err(error) => {
                 self.notice = Some(
-                    Notice::warning("Dispositivo removido da sessão, mas não do arquivo")
+                    Notice::warning("Device removed from the session, but not from the file")
                         .with_detail(error.to_string()),
                 );
             }
@@ -629,9 +618,9 @@ impl App {
             }
             None => {
                 self.notice = Some(
-                    Notice::error("Nenhum dispositivo correspondente")
+                    Notice::error("No matching device")
                         .with_detail(format!(
-                            "Não encontrei {:04X}:{:04X} na enumeração atual. Clique em “Detectar novamente” ou confira VID/PID com lsusb.",
+                            "Could not find {:04X}:{:04X} in the current enumeration. Click “Detect again” or check the VID/PID with lsusb.",
                             saved.vendor_id, saved.product_id
                         )),
                 );
@@ -709,11 +698,11 @@ impl App {
                 self.hex_input = self.state.color.to_hex();
                 self.hex_error = None;
                 self.mark_dirty();
-                self.notice = Some(Notice::info("Padrão restaurado").with_detail(
+                self.notice = Some(Notice::info("Defaults restored").with_detail(
                     if self.config.device().is_some() {
-                        "A iluminação será sincronizada automaticamente."
+                        "The lighting will be synchronized automatically."
                     } else {
-                        "Configure o teclado na página Conexão para enviar."
+                        "Configure the keyboard on the Connection page to send."
                     },
                 ));
             }
@@ -781,11 +770,11 @@ impl App {
         .align_y(Alignment::Center);
 
         let (status_color, status_text) = if self.config.device().is_none() {
-            (C_MUTED, "Não configurado")
+            (C_MUTED, "Not configured")
         } else if self.current_candidate().is_some() {
-            (C_SUCCESS, "Teclado encontrado")
+            (C_SUCCESS, "Keyboard found")
         } else {
-            (C_WARNING, "Teclado ausente")
+            (C_WARNING, "Keyboard missing")
         };
 
         let status = container(
@@ -796,7 +785,7 @@ impl App {
                 text(
                     self.current_candidate()
                         .map(DeviceCandidate::display_name)
-                        .unwrap_or_else(|| "Página Conexão para configurar".to_string())
+                        .unwrap_or_else(|| "Connection page to configure".to_string())
                 )
                 .size(11)
                 .color(C_MUTED),
@@ -808,9 +797,9 @@ impl App {
         .style(sidebar_status_style);
 
         let nav = column![
-            nav_button("Iluminação", Page::Lighting, self.page),
-            nav_button("Conexão", Page::Connection, self.page),
-            nav_button("Sobre", Page::About, self.page),
+            nav_button("Lighting", Page::Lighting, self.page),
+            nav_button("Connection", Page::Connection, self.page),
+            nav_button("About", Page::About, self.page),
         ]
         .spacing(6);
 
@@ -835,8 +824,8 @@ impl App {
 
     fn lighting_page(&self) -> Element<'_, Message> {
         let header = self.page_header(
-            "Iluminação",
-            "Ajuste a cor, o brilho e o efeito — tudo é aplicado automaticamente.",
+            "Lighting",
+            "Adjust the color, brightness and effect — everything is applied automatically.",
         );
 
         let mut content = column![header].spacing(18);
@@ -852,7 +841,7 @@ impl App {
 
         let picker_column = column![
             picker,
-            text("Arraste para escolher; a cor é enviada ao soltar.")
+            text("Drag to choose; the color is sent when you release.")
                 .size(10)
                 .color(C_MUTED)
                 .width(Length::Fixed(PICKER_SIZE)),
@@ -874,7 +863,7 @@ impl App {
                         .size(14)
                         .style(input_style(self.hex_error.is_some())),
                     text(self.hex_error.clone().unwrap_or_else(|| {
-                        "Digite um HEX ou use o seletor e os canais.".to_string()
+                        "Enter a HEX value or use the picker and the channels.".to_string()
                     }))
                     .size(11)
                     .color(if self.hex_error.is_some() {
@@ -907,7 +896,7 @@ impl App {
                 Message::BlueChanged
             ),
             row![
-                text("Atalhos").size(11).color(C_MUTED),
+                text("Presets").size(11).color(C_MUTED),
                 preset_button(Rgb::WHITE),
                 preset_button(Rgb::new(0xFF, 0x57, 0x33)),
                 preset_button(Rgb::new(0x00, 0xFF, 0x88)),
@@ -924,7 +913,7 @@ impl App {
         let color_card = card(
             column![
                 row![
-                    text("Cor").size(16).font(bold()),
+                    text("Color").size(16).font(bold()),
                     Space::new().width(Length::Fill),
                     text(self.state.color.to_hex())
                         .size(12)
@@ -942,7 +931,7 @@ impl App {
         let brightness_card = card(
             row![
                 column![
-                    text("Brilho").size(16).font(bold()),
+                    text("Brightness").size(16).font(bold()),
                     text(format!("{}%", brightness_percent(self.state.brightness)))
                         .size(28)
                         .font(bold())
@@ -974,7 +963,7 @@ impl App {
                 .spacing(5)
                 .width(Length::Fill),
                 column![
-                    text("Efeito atual").size(10).color(C_MUTED),
+                    text("Current effect").size(10).color(C_MUTED),
                     text(self.state.effect.label()).size(12).color(C_TEXT),
                 ]
                 .spacing(3)
@@ -987,8 +976,8 @@ impl App {
         let speed_card = card(
             row![
                 column![
-                    text("Velocidade").size(16).font(bold()),
-                    text(format!("Nível {}", self.state.speed))
+                    text("Speed").size(16).font(bold()),
+                    text(format!("Level {}", self.state.speed))
                         .size(28)
                         .font(bold())
                         .color(C_TEXT),
@@ -1005,7 +994,7 @@ impl App {
                     .width(Length::Fill)
                     .style(|_, status| slider_style(C_ACCENT, status)),
                     row![
-                        text("1 · lenta").size(10).color(C_MUTED),
+                        text("1 · slow").size(10).color(C_MUTED),
                         Space::new().width(Length::Fill),
                         text("2").size(10).color(C_MUTED),
                         Space::new().width(Length::Fill),
@@ -1013,14 +1002,14 @@ impl App {
                         Space::new().width(Length::Fill),
                         text("4").size(10).color(C_MUTED),
                         Space::new().width(Length::Fill),
-                        text("5 · rápida").size(10).color(C_MUTED),
+                        text("5 · fast").size(10).color(C_MUTED),
                     ],
                 ]
                 .spacing(5)
                 .width(Length::Fill),
                 column![
-                    text("Dica").size(10).color(C_MUTED),
-                    text("Vale para efeitos animados").size(12).color(C_TEXT),
+                    text("Tip").size(10).color(C_MUTED),
+                    text("Applies to animated effects").size(12).color(C_TEXT),
                 ]
                 .spacing(3)
                 .width(Length::Fixed(150.0)),
@@ -1033,7 +1022,7 @@ impl App {
         let effects_card = card(
             column![
                 row![
-                    text("Efeitos").size(16).font(bold()),
+                    text("Effects").size(16).font(bold()),
                     Space::new().width(Length::Fill),
                     badge(self.state.effect.label(), C_ACCENT),
                 ]
@@ -1044,23 +1033,23 @@ impl App {
         );
 
         let (status_text, status_color) = if self.config.device().is_none() {
-            ("Configure o teclado na página Conexão", C_WARNING)
+            ("Configure the keyboard on the Connection page", C_WARNING)
         } else if self.auto_apply_paused {
-            ("Falha na última aplicação; veja o aviso", C_ERROR)
+            ("Last apply failed; see the notice", C_ERROR)
         } else if self.current_candidate().is_none() {
-            ("Teclado ausente; conecte para sincronizar", C_WARNING)
+            ("Keyboard missing; connect to synchronize", C_WARNING)
         } else if self.picker_active {
-            ("Solte o mouse para aplicar a cor", C_INFO)
+            ("Release the mouse to apply the color", C_INFO)
         } else if self.dirty {
-            ("Aplicando automaticamente (máx. ~8/s)...", C_WARNING)
+            ("Applying automatically (max ~8/s)...", C_WARNING)
         } else if self.pending_save {
-            ("Sincronizado · salvando configuração...", C_MUTED)
+            ("Synchronized · saving configuration...", C_MUTED)
         } else {
-            ("Sincronizado automaticamente · máx. ~8 envios/s", C_MUTED)
+            ("Synchronized automatically · max ~8 sends/s", C_MUTED)
         };
 
         let mut actions = row![
-            button(text("Restaurar padrão").size(13))
+            button(text("Restore defaults").size(13))
                 .padding([10, 14])
                 .style(secondary_button)
                 .on_press(Message::ResetDefaults),
@@ -1072,7 +1061,7 @@ impl App {
 
         if self.auto_apply_paused && self.config.device().is_some() {
             actions = actions.push(
-                button(text("Tentar novamente").size(12))
+                button(text("Try again").size(12))
                     .padding([9, 14])
                     .style(secondary_button)
                     .on_press(Message::Apply),
@@ -1090,8 +1079,8 @@ impl App {
 
     fn connection_page(&self) -> Element<'_, Message> {
         let header = self.page_header(
-            "Conexão",
-            "Selecione a interface de iluminação do teclado ou informe os IDs manualmente.",
+            "Connection",
+            "Select the keyboard lighting interface or enter the IDs manually.",
         );
 
         let mut content = column![header].spacing(18);
@@ -1112,17 +1101,17 @@ impl App {
                 Some(candidate) => column![
                     row![
                         text(candidate.display_name()).size(18).font(bold()),
-                        badge("Em uso", C_SUCCESS),
+                        badge("In use", C_SUCCESS),
                     ]
                     .spacing(10)
                     .align_y(Alignment::Center),
                     text(candidate.ids()).size(12).color(C_MUTED),
                     row![
-                        button(text("Testar luz roxa").size(12))
+                        button(text("Test purple light").size(12))
                             .padding([8, 12])
                             .style(secondary_button)
                             .on_press(Message::TestDevice(candidate.path.clone())),
-                        button(text("Esquecer dispositivo").size(12))
+                        button(text("Forget device").size(12))
                             .padding([8, 12])
                             .style(danger_button)
                             .on_press(Message::ForgetDevice),
@@ -1132,7 +1121,7 @@ impl App {
                 .spacing(8)
                 .into(),
                 None => column![
-                    text("Dispositivo configurado, mas não encontrado")
+                    text("Device configured but not found")
                         .size(17)
                         .font(bold())
                         .color(C_WARNING),
@@ -1147,15 +1136,15 @@ impl App {
                     ))
                     .size(12)
                     .color(C_MUTED),
-                    text("Conecte o teclado e clique em Detectar novamente, ou escolha outro dispositivo abaixo.")
+                    text("Connect the keyboard and click Detect again, or choose another device below.")
                         .size(12)
                         .color(C_MUTED),
                     row![
-                        button(text("Detectar novamente").size(12))
+                        button(text("Detect again").size(12))
                             .padding([8, 12])
                             .style(primary_button)
                             .on_press(Message::Rescan),
-                        button(text("Esquecer dispositivo").size(12))
+                        button(text("Forget device").size(12))
                             .padding([8, 12])
                             .style(danger_button)
                             .on_press(Message::ForgetDevice),
@@ -1166,8 +1155,8 @@ impl App {
                 .into(),
             },
             None => column![
-                text("Nenhum teclado configurado").size(17).font(bold()),
-                text("Escolha um dispositivo detectado ou preencha os IDs manualmente.")
+                text("No keyboard configured").size(17).font(bold()),
+                text("Choose a detected device or fill in the IDs manually.")
                     .size(12)
                     .color(C_MUTED),
             ]
@@ -1177,10 +1166,7 @@ impl App {
 
         card(
             column![
-                text("Dispositivo atual")
-                    .size(14)
-                    .font(bold())
-                    .color(C_MUTED),
+                text("Current device").size(14).font(bold()).color(C_MUTED),
                 body,
             ]
             .spacing(12),
@@ -1202,7 +1188,7 @@ impl App {
         let mut list = column![].spacing(8);
         if visible.is_empty() {
             list = list.push(
-                text("Nenhum dispositivo HID visível. Clique em Detectar novamente.")
+                text("No visible HID devices. Click Detect again.")
                     .size(12)
                     .color(C_MUTED),
             );
@@ -1216,12 +1202,12 @@ impl App {
         card(
             column![
                 row![
-                    text("Dispositivos detectados").size(16).font(bold()),
+                    text("Detected devices").size(16).font(bold()),
                     Space::new().width(Length::Fill),
-                    text(format!("{} encontrado(s)", self.candidates.len()))
+                    text(format!("{} found", self.candidates.len()))
                         .size(11)
                         .color(C_MUTED),
-                    button(text("Detectar novamente").size(12))
+                    button(text("Detect again").size(12))
                         .padding([7, 11])
                         .style(secondary_button)
                         .on_press(Message::Rescan),
@@ -1230,7 +1216,7 @@ impl App {
                 .align_y(Alignment::Center),
                 row![
                     iced::widget::toggler(self.show_all_devices)
-                        .label("Mostrar todos os dispositivos HID")
+                        .label("Show all HID devices")
                         .text_size(12)
                         .on_toggle(Message::ShowAllToggled),
                     Space::new().width(Length::Fill),
@@ -1246,11 +1232,11 @@ impl App {
         let vendor_badge = if candidate.vendor_specific {
             badge("vendor-specific", C_ACCENT)
         } else {
-            badge("outro HID", C_MUTED)
+            badge("other HID", C_MUTED)
         };
 
         let mut actions = row![
-            button(text("Testar").size(12))
+            button(text("Test").size(12))
                 .padding([7, 11])
                 .style(secondary_button)
                 .on_press(Message::TestDevice(candidate.path.clone())),
@@ -1260,13 +1246,13 @@ impl App {
 
         if in_use {
             actions = actions.push(
-                button(text("Em uso").size(12))
+                button(text("In use").size(12))
                     .padding([7, 11])
                     .style(secondary_button),
             );
         } else {
             actions = actions.push(
-                button(text("Usar este dispositivo").size(12))
+                button(text("Use this device").size(12))
                     .padding([7, 11])
                     .style(primary_button)
                     .on_press(Message::UseDevice(candidate.path.clone())),
@@ -1300,16 +1286,16 @@ impl App {
     fn manual_card(&self) -> Element<'_, Message> {
         card(
             column![
-                text("Configuração manual").size(16).font(bold()),
-                text("Use quando o dispositivo não aparecer corretamente na lista. Campos vazios de interface e usage page são tratados como automáticos.")
+                text("Manual configuration").size(16).font(bold()),
+                text("Use this when the device does not appear correctly in the list. Empty interface and usage page fields are treated as automatic.")
                     .size(11)
                     .color(C_MUTED),
                 row![
                     field("Vendor ID", "0C45", &self.manual_vid, Message::ManualVidChanged),
                     field("Product ID", "8501", &self.manual_pid, Message::ManualPidChanged),
                     field("Interface", "auto", &self.manual_iface, Message::ManualIfaceChanged),
-                    field("Usage page", "opcional", &self.manual_usage, Message::ManualUsageChanged),
-                    button(text("Conectar").size(13).font(bold()))
+                    field("Usage page", "optional", &self.manual_usage, Message::ManualUsageChanged),
+                    button(text("Connect").size(13).font(bold()))
                         .padding([10, 16])
                         .style(primary_button)
                         .on_press(Message::ManualConnect),
@@ -1324,13 +1310,13 @@ impl App {
 
     fn about_page(&self) -> Element<'_, Message> {
         let header = self.page_header(
-            "Sobre",
-            "Alternativa livre ao software oficial do Husky Sled, agora em Rust.",
+            "About",
+            "A free alternative to the official Husky Sled software, now in Rust.",
         );
 
         let config_path = config::config_file()
             .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "indisponível".to_string());
+            .unwrap_or_else(|| "unavailable".to_string());
 
         let mut content = column![header].spacing(18);
         if let Some(notice) = self.notice_view() {
@@ -1343,7 +1329,7 @@ impl App {
                     image(self.logo.clone()).width(64).height(64),
                     column![
                         text("HuskyNext").size(24).font(bold()),
-                        text(format!("Versão {VERSION} · protocolo não oficial"))
+                        text(format!("Version {VERSION} · unofficial protocol"))
                             .size(12)
                             .color(C_MUTED),
                     ]
@@ -1351,30 +1337,30 @@ impl App {
                 ]
                 .spacing(16)
                 .align_y(Alignment::Center),
-                text("Este projeto não tem vínculo com a Husky. O protocolo foi obtido por engenharia reversa e pode variar entre modelos ou revisões de firmware. Use por sua conta e risco.")
+                text("This project is not affiliated with Husky. The protocol was obtained through reverse engineering and may vary between models or firmware revisions. Use at your own risk.")
                     .size(13)
                     .color(C_MUTED),
                 rule(),
-                text("Protocolo").size(16).font(bold()),
+                text("Protocol").size(16).font(bold()),
                 key_value("Report ID", "0x04 · output report"),
-                key_value("Tamanho", "64 bytes (1 byte de ID + 63 de payload)"),
-                key_value("Modo", "offset 0x09 · 19 efeitos (0x00–0x12)"),
-                key_value("Brilho", "offset 0x0A · 5 níveis (0x00–0x04)"),
-                key_value("Velocidade", "offset 0x0B · 5 níveis (0x04–0x00; 1=lenta, 5=rápida)"),
-                key_value("Cor", "offsets 0x0E, 0x0F e 0x10 · R, G, B"),
-                key_value("Configuração", config_path),
+                key_value("Size", "64 bytes (1 byte of ID + 63 of payload)"),
+                key_value("Mode", "offset 0x09 · 19 effects (0x00–0x12)"),
+                key_value("Brightness", "offset 0x0A · 5 levels (0x00–0x04)"),
+                key_value("Speed", "offset 0x0B · 5 levels (0x04–0x00; 1=slow, 5=fast)"),
+                key_value("Color", "offsets 0x0E, 0x0F and 0x10 · R, G, B"),
+                key_value("Configuration", config_path),
             ]
             .spacing(12),
         );
 
         let safety = card(
             column![
-                text("Segurança e robustez").size(16).font(bold()),
-                bullet("A configuração é gravada de forma atômica, com permissões restritas ao usuário."),
-                bullet("Valores inválidos do arquivo são saneados antes de qualquer envio."),
-                bullet("O dispositivo é redescoberto a cada envio; IDs ou interface antigos não impedem a reconexão."),
-                bullet("O teste de identificação envia roxo (#8835E9) estático a 100%, em vez de prometer uma cor e enviar outra."),
-                bullet("A regra udev recomendada usa TAG+=\"uaccess\" em vez de liberar o dispositivo para todos com MODE=\"0666\"."),
+                text("Safety and robustness").size(16).font(bold()),
+                bullet("The configuration is written atomically, with permissions restricted to the user."),
+                bullet("Invalid values from the file are sanitized before any send."),
+                bullet("The device is rediscovered on every send; old IDs or interface do not prevent reconnection."),
+                bullet("The identification test sends static purple (#8835E9) at 100%, instead of promising one color and sending another."),
+                bullet("The recommended udev rule uses TAG+=\"uaccess\" instead of making the device available to everyone with MODE=\"0666\"."),
             ]
             .spacing(7),
         );
@@ -1402,7 +1388,7 @@ impl App {
                     .font(bold())
                     .color(color),
                 Space::new().width(Length::Fill),
-                button(text("Fechar").size(10))
+                button(text("Close").size(10))
                     .padding([3, 8])
                     .style(ghost_button)
                     .on_press(Message::DismissNotice),
@@ -1855,8 +1841,8 @@ fn bullet<'a>(text_value: &'a str) -> Element<'a, Message> {
 fn udev_card<'a>() -> Element<'a, Message> {
     card(
         column![
-            text("Permissão no Linux").size(16).font(bold()),
-            text("Se aparecer “sem permissão”, crie /etc/udev/rules.d/99-huskynext.rules com o conteúdo abaixo. Substitua os IDs pelos do seu teclado, se necessário.")
+            text("Linux permission").size(16).font(bold()),
+            text("If “permission denied” appears, create /etc/udev/rules.d/99-huskynext.rules with the content below. Replace the IDs with those of your keyboard if needed.")
                 .size(12)
                 .color(C_MUTED),
             container(
@@ -1876,7 +1862,7 @@ fn udev_card<'a>() -> Element<'a, Message> {
                 },
                 ..ContainerStyle::default()
             }),
-            text("Depois: sudo udevadm control --reload-rules && sudo udevadm trigger. Reconecte o teclado. TAG+=\"uaccess\" concede acesso apenas à sessão ativa, sem abrir o dispositivo para todos os usuários.")
+            text("Then: sudo udevadm control --reload-rules && sudo udevadm trigger. Reconnect the keyboard. TAG+=\"uaccess\" grants access only to the active session, without opening the device to all users.")
                 .size(11)
                 .color(C_MUTED),
         ]
@@ -1922,18 +1908,15 @@ fn parse_manual_device(
     usage: &str,
 ) -> Result<DeviceConfig, ManualDeviceError> {
     let Some(vendor_id) = parse_hex_u16(vid) else {
-        return Err(
-            ManualDeviceError::new("Vendor ID inválido").with_detail("Use hexadecimal, como 0C45.")
-        );
+        return Err(ManualDeviceError::new("Invalid Vendor ID")
+            .with_detail("Use hexadecimal, such as 0C45."));
     };
     let Some(product_id) = parse_hex_u16(pid) else {
-        return Err(ManualDeviceError::new("Product ID inválido")
-            .with_detail("Use hexadecimal, como 8501."));
+        return Err(ManualDeviceError::new("Invalid Product ID")
+            .with_detail("Use hexadecimal, such as 8501."));
     };
     if vendor_id == 0 || product_id == 0 {
-        return Err(ManualDeviceError::new(
-            "VID e PID devem ser diferentes de zero",
-        ));
+        return Err(ManualDeviceError::new("VID and PID must not be zero"));
     }
 
     let interface_number = match iface.trim() {
@@ -1941,8 +1924,8 @@ fn parse_manual_device(
         value => match value.parse::<i32>() {
             Ok(value) if value >= 0 => Some(value),
             _ => {
-                return Err(ManualDeviceError::new("Interface inválida")
-                    .with_detail("Informe um número inteiro não negativo ou deixe em branco."));
+                return Err(ManualDeviceError::new("Invalid interface")
+                    .with_detail("Enter a non-negative integer or leave it blank."));
             }
         },
     };
@@ -1952,8 +1935,8 @@ fn parse_manual_device(
         value => match parse_hex_u16(value) {
             Some(value) => Some(value),
             None => {
-                return Err(ManualDeviceError::new("Usage page inválido")
-                    .with_detail("Use hexadecimal, como FF1C, ou deixe em branco."));
+                return Err(ManualDeviceError::new("Invalid usage page")
+                    .with_detail("Use hexadecimal, such as FF1C, or leave it blank."));
             }
         },
     };
@@ -2331,41 +2314,41 @@ mod tests {
     #[test]
     fn parse_manual_device_rejects_invalid_ids() {
         let error = parse_manual_device("ZZZZ", "8501", "", "").unwrap_err();
-        assert_eq!(error.title, "Vendor ID inválido");
-        assert_eq!(error.detail, Some("Use hexadecimal, como 0C45."));
+        assert_eq!(error.title, "Invalid Vendor ID");
+        assert_eq!(error.detail, Some("Use hexadecimal, such as 0C45."));
 
         let error = parse_manual_device("0C45", "ZZZZ", "", "").unwrap_err();
-        assert_eq!(error.title, "Product ID inválido");
-        assert_eq!(error.detail, Some("Use hexadecimal, como 8501."));
+        assert_eq!(error.title, "Invalid Product ID");
+        assert_eq!(error.detail, Some("Use hexadecimal, such as 8501."));
     }
 
     #[test]
     fn parse_manual_device_rejects_zero_ids() {
         let error = parse_manual_device("0000", "8501", "", "").unwrap_err();
-        assert_eq!(error.title, "VID e PID devem ser diferentes de zero");
+        assert_eq!(error.title, "VID and PID must not be zero");
         assert_eq!(error.detail, None);
 
         let error = parse_manual_device("0C45", "0", "", "").unwrap_err();
-        assert_eq!(error.title, "VID e PID devem ser diferentes de zero");
+        assert_eq!(error.title, "VID and PID must not be zero");
     }
 
     #[test]
     fn parse_manual_device_rejects_negative_interface() {
         let error = parse_manual_device("0C45", "8501", "-1", "").unwrap_err();
-        assert_eq!(error.title, "Interface inválida");
+        assert_eq!(error.title, "Invalid interface");
         assert_eq!(
             error.detail,
-            Some("Informe um número inteiro não negativo ou deixe em branco.")
+            Some("Enter a non-negative integer or leave it blank.")
         );
     }
 
     #[test]
     fn parse_manual_device_rejects_invalid_usage_page() {
         let error = parse_manual_device("0C45", "8501", "", "XYZ").unwrap_err();
-        assert_eq!(error.title, "Usage page inválido");
+        assert_eq!(error.title, "Invalid usage page");
         assert_eq!(
             error.detail,
-            Some("Use hexadecimal, como FF1C, ou deixe em branco.")
+            Some("Use hexadecimal, such as FF1C, or leave it blank.")
         );
     }
 }

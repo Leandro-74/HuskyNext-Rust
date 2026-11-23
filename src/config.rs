@@ -52,15 +52,15 @@ pub struct LoadResult {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
-    #[error("Não foi possível localizar o diretório inicial do usuário.")]
+    #[error("Could not locate the user's home directory.")]
     NoHome,
-    #[error("Falha ao acessar {path}: {source}")]
+    #[error("Failed to access {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    #[error("Falha ao serializar a configuração: {0}")]
+    #[error("Failed to serialize the configuration: {0}")]
     Serialize(#[from] serde_json::Error),
 }
 
@@ -224,14 +224,14 @@ pub fn load_from(path: &Path) -> LoadResult {
             Err(error) => LoadResult {
                 config: Config::default(),
                 warning: Some(format!(
-                    "A configuração em {} está inválida e foi ignorada: {error}",
+                    "The configuration in {} is invalid and was ignored: {error}",
                     path.display()
                 )),
             },
         },
         Err(error) => LoadResult {
             config: Config::default(),
-            warning: Some(format!("Não foi possível ler {}: {error}", path.display())),
+            warning: Some(format!("Could not read {}: {error}", path.display())),
         },
     }
 }

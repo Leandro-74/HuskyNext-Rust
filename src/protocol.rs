@@ -94,25 +94,25 @@ impl Effect {
 
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Off => "Desligado",
-            Self::Wave => "Onda",
-            Self::Blinds => "Persianas",
-            Self::Diffusion => "Difusão",
-            Self::Neon => "Néon",
-            Self::Breathing => "Respiração",
-            Self::Static => "Estático",
-            Self::Reactive => "Reativo",
-            Self::Raindrop => "Gota de Chuva",
-            Self::LineReactive => "Reativa por Linha",
-            Self::Starry => "Iluminado por Estrelas",
-            Self::Blooming => "Flores em Flor",
-            Self::Cascade => "Cascata",
-            Self::Rainbow => "Arco-íris",
-            Self::Cartoon => "Desenho Animado",
-            Self::RainScene => "Cena de Chuva",
-            Self::Scan => "Escaneamento",
+            Self::Off => "Off",
+            Self::Wave => "Wave",
+            Self::Blinds => "Blinds",
+            Self::Diffusion => "Diffusion",
+            Self::Neon => "Neon",
+            Self::Breathing => "Breathing",
+            Self::Static => "Static",
+            Self::Reactive => "Reactive",
+            Self::Raindrop => "Raindrop",
+            Self::LineReactive => "Line Reactive",
+            Self::Starry => "Starry",
+            Self::Blooming => "Blooming",
+            Self::Cascade => "Cascade",
+            Self::Rainbow => "Rainbow",
+            Self::Cartoon => "Cartoon",
+            Self::RainScene => "Rain Scene",
+            Self::Scan => "Scan",
             Self::SingleOff => "Single Off",
-            Self::Flow => "Fluxo",
+            Self::Flow => "Flow",
         }
     }
 
@@ -197,7 +197,7 @@ pub const CONNECTION_TEST_HEX: &str = "8835E9";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ColorError {
-    #[error("Cor inválida. Use seis dígitos hexadecimais, como FF5733 ou #FF5733.")]
+    #[error("Invalid color. Use six hexadecimal digits, such as FF5733 or #FF5733.")]
     InvalidFormat,
 }
 
