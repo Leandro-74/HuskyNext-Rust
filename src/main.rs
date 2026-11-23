@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use huskynext::config;
-use huskynext::device::{self, DeviceCandidate};
+use huskynext::device;
 use huskynext::protocol::{
     CONNECTION_TEST_HEX, DEFAULT_SPEED, Effect, KeyboardState, MAX_BRIGHTNESS, Rgb,
 };
@@ -95,16 +95,22 @@ fn send_test(color: &str) -> ExitCode {
         }
     };
 
-    let saved = config::load().config.device();
-    let candidate = saved
-        .and_then(|saved| device::find_candidate(&candidates, saved))
-        .or_else(|| choose_default_candidate(&candidates));
+    let loaded = config::load();
+    if let Some(warning) = &loaded.warning {
+        eprintln!("{warning}");
+    }
+    let saved = loaded.config.device();
 
-    let Some(candidate) = candidate else {
-        eprintln!(
-            "Nenhum dispositivo adequado encontrado. Use --list para inspecionar os dispositivos HID."
-        );
-        return ExitCode::FAILURE;
+    let candidate = match device::select_for_test(&candidates, saved) {
+        Ok(candidate) => candidate,
+        Err(error) => {
+            eprintln!("{error}");
+            if let Some(hint) = error.user_hint() {
+                eprintln!();
+                eprintln!("{hint}");
+            }
+            return ExitCode::FAILURE;
+        }
     };
 
     let state = KeyboardState {
@@ -133,27 +139,6 @@ fn send_test(color: &str) -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-fn choose_default_candidate(candidates: &[DeviceCandidate]) -> Option<&DeviceCandidate> {
-    candidates
-        .iter()
-        .find(|candidate| {
-            candidate.vendor_specific
-                && (candidate
-                    .manufacturer
-                    .as_deref()
-                    .is_some_and(|value| value.to_lowercase().contains("sonix"))
-                    || candidate
-                        .product
-                        .as_deref()
-                        .is_some_and(|value| value.to_lowercase().contains("sled")))
-        })
-        .or_else(|| {
-            candidates
-                .iter()
-                .find(|candidate| candidate.vendor_specific)
-        })
 }
 
 fn print_help() {
