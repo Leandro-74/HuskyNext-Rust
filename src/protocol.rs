@@ -257,10 +257,6 @@ pub fn brightness_percent(level: u8) -> u8 {
     level.min(MAX_BRIGHTNESS) * 25
 }
 
-pub fn brightness_label(level: u8) -> String {
-    format!("{}%", brightness_percent(level))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
