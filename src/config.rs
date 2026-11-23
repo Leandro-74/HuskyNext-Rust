@@ -24,15 +24,25 @@ pub struct DeviceConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vendor_id: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_id: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub interface_number: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_page: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub effect: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bright: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub speed: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub r: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub g: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub b: Option<u8>,
 }
 
