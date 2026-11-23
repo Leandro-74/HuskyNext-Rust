@@ -5,6 +5,11 @@ edition = "2024"
 rust-version = "1.88"
 description = "Controle de iluminação do Husky Sled para Linux, com interface iced"
 license = "MIT"
+repository = "https://github.com/Leandro-74/HuskyNext-Rust"
+homepage = "https://github.com/Leandro-74/HuskyNext-Rust"
+readme = "README.md"
+keywords = ["hid", "keyboard", "lighting", "iced", "linux"]
+categories = ["command-line-utilities", "hardware-support", "gui"]
 
 [dependencies]
 iced = { version = "0.14", features = ["image", "canvas", "tokio"] }
