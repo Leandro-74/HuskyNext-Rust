@@ -157,7 +157,6 @@ pub struct App {
     hex_input: String,
     hex_error: Option<String>,
     candidates: Vec<DeviceCandidate>,
-    selected_candidate: Option<String>,
     show_all_devices: bool,
     dirty: bool,
     auto_apply_paused: bool,
@@ -190,9 +189,8 @@ impl App {
         };
 
         let saved_device = config.device();
-        let selected_candidate = saved_device
-            .and_then(|saved| device::find_candidate(&candidates, saved))
-            .map(|candidate| candidate.path.clone());
+        let selected_candidate =
+            saved_device.and_then(|saved| device::find_candidate(&candidates, saved));
 
         if let Some(saved) = saved_device
             && selected_candidate.is_none()
@@ -239,7 +237,6 @@ impl App {
             hex_input: state.color.to_hex(),
             hex_error: None,
             candidates,
-            selected_candidate,
             show_all_devices,
             dirty: false,
             auto_apply_paused: false,
@@ -270,18 +267,6 @@ impl App {
         } else {
             self.candidates.push(candidate);
         }
-    }
-
-    fn is_in_use(&self, candidate: &DeviceCandidate) -> bool {
-        let Some(saved) = self.config.device() else {
-            return false;
-        };
-
-        saved.vendor_id == candidate.vendor_id
-            && saved.product_id == candidate.product_id
-            && saved
-                .interface_number
-                .is_none_or(|iface| iface == candidate.interface_number)
     }
 
     fn mark_dirty(&mut self) {
@@ -355,7 +340,6 @@ impl App {
             Ok((sent, candidate)) => {
                 self.dirty = false;
                 self.auto_apply_paused = false;
-                self.selected_candidate = Some(candidate.path.clone());
                 self.config.set_device(candidate.device_config());
                 self.config.set_state(self.state);
                 self.remember_candidate(candidate.clone());
@@ -479,11 +463,10 @@ impl App {
                 }
 
                 let saved = self.config.device();
-                self.selected_candidate = saved
-                    .and_then(|saved| device::find_candidate(&self.candidates, saved))
-                    .map(|candidate| candidate.path.clone());
+                let current =
+                    saved.and_then(|saved| device::find_candidate(&self.candidates, saved));
 
-                self.notice = Some(match (saved, self.selected_candidate.as_ref()) {
+                self.notice = Some(match (saved, current) {
                     (Some(_), Some(_)) => Notice::success("Dispositivos atualizados")
                         .with_detail("O teclado configurado foi encontrado."),
                     (Some(_), None) => Notice::warning("Teclado configurado não encontrado")
@@ -522,7 +505,6 @@ impl App {
 
         match device::write_to_candidate(&candidate, &test_state.report()) {
             Ok(sent) => {
-                self.selected_candidate = Some(candidate.path.clone());
                 self.notice = Some(
                     Notice::success("Teste enviado")
                         .with_detail(format!(
@@ -557,7 +539,6 @@ impl App {
                 self.auto_apply_paused = false;
                 self.pending_save = false;
                 self.save_ready_at = None;
-                self.selected_candidate = Some(candidate.path.clone());
                 self.remember_candidate(candidate.clone());
                 self.manual_vid = format!("{:04X}", candidate.vendor_id);
                 self.manual_pid = format!("{:04X}", candidate.product_id);
@@ -588,7 +569,6 @@ impl App {
 
     fn forget_device(&mut self) {
         self.config.clear_device();
-        self.selected_candidate = None;
         self.dirty = false;
         self.auto_apply_paused = false;
         self.pending_save = false;
@@ -1236,6 +1216,10 @@ impl App {
             .filter(|candidate| self.show_all_devices || candidate.vendor_specific)
             .collect();
 
+        let current_path = self
+            .current_candidate()
+            .map(|candidate| candidate.path.as_str());
+
         let mut list = column![].spacing(8);
         if visible.is_empty() {
             list = list.push(
@@ -1245,7 +1229,8 @@ impl App {
             );
         } else {
             for candidate in visible {
-                list = list.push(self.candidate_row(candidate));
+                let in_use = current_path == Some(candidate.path.as_str());
+                list = list.push(self.candidate_row(candidate, in_use));
             }
         }
 
@@ -1278,8 +1263,7 @@ impl App {
         .into()
     }
 
-    fn candidate_row(&self, candidate: &DeviceCandidate) -> Element<'_, Message> {
-        let in_use = self.is_in_use(candidate);
+    fn candidate_row(&self, candidate: &DeviceCandidate, in_use: bool) -> Element<'_, Message> {
         let vendor_badge = if candidate.vendor_specific {
             badge("vendor-specific", C_ACCENT)
         } else {
