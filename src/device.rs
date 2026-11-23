@@ -580,4 +580,61 @@ mod tests {
         assert!(found.vendor_specific);
         assert_eq!(found.interface_number, 2);
     }
+
+    #[test]
+    fn send_state_with_candidates_fails_without_candidates() {
+        let config = DeviceConfig {
+            vendor_id: 0x0C45,
+            product_id: 0x8501,
+            interface_number: Some(1),
+            usage_page: Some(0xFF1C),
+        };
+        assert!(matches!(
+            send_state_with_candidates(&[], config, KeyboardState::default()),
+            Err(DeviceError::NotFound)
+        ));
+    }
+
+    #[test]
+    fn write_to_candidate_rejects_short_report_without_opening_device() {
+        let candidate = candidate(true, 1, 0xFF1C);
+        let report = [0x04, 0x00, 0x00];
+        match write_to_candidate(&candidate, &report) {
+            Err(DeviceError::Incomplete { sent, expected }) => {
+                assert_eq!(sent, report.len());
+                assert_eq!(expected, REPORT_LEN);
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn write_to_candidate_rejects_invalid_report_id_without_opening_device() {
+        let candidate = candidate(true, 1, 0xFF1C);
+        let mut report = [0u8; REPORT_LEN];
+        report[0] = 0x01;
+        match write_to_candidate(&candidate, &report) {
+            Err(DeviceError::InvalidReport { expected, found }) => {
+                assert_eq!(expected, REPORT_ID);
+                assert_eq!(found, 0x01);
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stale_detection_matches_outdated_paths() {
+        assert!(DeviceError::NotFound.is_stale());
+        assert!(DeviceError::Open("No such file or directory".into()).is_stale());
+        assert!(DeviceError::Write("broken pipe".into()).is_stale());
+        assert!(
+            !DeviceError::Permission {
+                vendor_id: 0x0C45,
+                product_id: 0x8501,
+                details: "permission denied".into(),
+            }
+            .is_stale()
+        );
+        assert!(!DeviceError::Open("permission denied".into()).is_stale());
+    }
 }
