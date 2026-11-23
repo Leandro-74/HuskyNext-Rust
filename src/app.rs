@@ -605,56 +605,21 @@ impl App {
     }
 
     fn manual_connect(&mut self) {
-        let Some(vendor_id) = parse_hex_u16(&self.manual_vid) else {
-            self.notice = Some(
-                Notice::error("Vendor ID inválido").with_detail("Use hexadecimal, como 0C45."),
-            );
-            return;
-        };
-        let Some(product_id) = parse_hex_u16(&self.manual_pid) else {
-            self.notice = Some(
-                Notice::error("Product ID inválido").with_detail("Use hexadecimal, como 8501."),
-            );
-            return;
-        };
-        if vendor_id == 0 || product_id == 0 {
-            self.notice = Some(Notice::error("VID e PID devem ser diferentes de zero"));
-            return;
-        }
-
-        let interface_number = match self.manual_iface.trim() {
-            "" => None,
-            value => match value.parse::<i32>() {
-                Ok(value) if value >= 0 => Some(value),
-                _ => {
-                    self.notice =
-                        Some(Notice::error("Interface inválida").with_detail(
-                            "Informe um número inteiro não negativo ou deixe em branco.",
-                        ));
-                    return;
-                }
-            },
-        };
-
-        let usage_page = match self.manual_usage.trim() {
-            "" => None,
-            value => match parse_hex_u16(value) {
-                Some(value) => Some(value),
-                None => {
-                    self.notice = Some(
-                        Notice::error("Usage page inválido")
-                            .with_detail("Use hexadecimal, como FF1C, ou deixe em branco."),
-                    );
-                    return;
-                }
-            },
-        };
-
-        let saved = DeviceConfig {
-            vendor_id,
-            product_id,
-            interface_number,
-            usage_page,
+        let saved = match parse_manual_device(
+            &self.manual_vid,
+            &self.manual_pid,
+            &self.manual_iface,
+            &self.manual_usage,
+        ) {
+            Ok(saved) => saved,
+            Err(error) => {
+                let notice = Notice::error(error.title);
+                self.notice = Some(match error.detail {
+                    Some(detail) => notice.with_detail(detail),
+                    None => notice,
+                });
+                return;
+            }
         };
 
         match device::find_candidate(&self.candidates, saved) {
@@ -667,7 +632,7 @@ impl App {
                     Notice::error("Nenhum dispositivo correspondente")
                         .with_detail(format!(
                             "Não encontrei {:04X}:{:04X} na enumeração atual. Clique em “Detectar novamente” ou confira VID/PID com lsusb.",
-                            vendor_id, product_id
+                            saved.vendor_id, saved.product_id
                         )),
                 );
             }
@@ -1928,6 +1893,79 @@ fn device_error_notice(title: &str, error: &DeviceError) -> Notice {
     notice
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ManualDeviceError {
+    title: &'static str,
+    detail: Option<&'static str>,
+}
+
+impl ManualDeviceError {
+    const fn new(title: &'static str) -> Self {
+        Self {
+            title,
+            detail: None,
+        }
+    }
+
+    const fn with_detail(self, detail: &'static str) -> Self {
+        Self {
+            title: self.title,
+            detail: Some(detail),
+        }
+    }
+}
+
+fn parse_manual_device(
+    vid: &str,
+    pid: &str,
+    iface: &str,
+    usage: &str,
+) -> Result<DeviceConfig, ManualDeviceError> {
+    let Some(vendor_id) = parse_hex_u16(vid) else {
+        return Err(
+            ManualDeviceError::new("Vendor ID inválido").with_detail("Use hexadecimal, como 0C45.")
+        );
+    };
+    let Some(product_id) = parse_hex_u16(pid) else {
+        return Err(ManualDeviceError::new("Product ID inválido")
+            .with_detail("Use hexadecimal, como 8501."));
+    };
+    if vendor_id == 0 || product_id == 0 {
+        return Err(ManualDeviceError::new(
+            "VID e PID devem ser diferentes de zero",
+        ));
+    }
+
+    let interface_number = match iface.trim() {
+        "" => None,
+        value => match value.parse::<i32>() {
+            Ok(value) if value >= 0 => Some(value),
+            _ => {
+                return Err(ManualDeviceError::new("Interface inválida")
+                    .with_detail("Informe um número inteiro não negativo ou deixe em branco."));
+            }
+        },
+    };
+
+    let usage_page = match usage.trim() {
+        "" => None,
+        value => match parse_hex_u16(value) {
+            Some(value) => Some(value),
+            None => {
+                return Err(ManualDeviceError::new("Usage page inválido")
+                    .with_detail("Use hexadecimal, como FF1C, ou deixe em branco."));
+            }
+        },
+    };
+
+    Ok(DeviceConfig {
+        vendor_id,
+        product_id,
+        interface_number,
+        usage_page,
+    })
+}
+
 fn parse_hex_u16(value: &str) -> Option<u16> {
     let value = value.trim();
     let value = value
@@ -2260,5 +2298,74 @@ fn candidate_row_style(in_use: bool) -> ContainerStyle {
             radius: 10.0.into(),
         },
         ..ContainerStyle::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_manual_device_accepts_valid_ids() {
+        let device = parse_manual_device("0C45", "8501", "", "").unwrap();
+        assert_eq!(
+            device,
+            DeviceConfig {
+                vendor_id: 0x0C45,
+                product_id: 0x8501,
+                interface_number: None,
+                usage_page: None,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_manual_device_accepts_hex_prefix_and_optional_fields() {
+        let device = parse_manual_device("0x0C45", "0x8501", "1", "0xFF1C").unwrap();
+        assert_eq!(device.vendor_id, 0x0C45);
+        assert_eq!(device.product_id, 0x8501);
+        assert_eq!(device.interface_number, Some(1));
+        assert_eq!(device.usage_page, Some(0xFF1C));
+    }
+
+    #[test]
+    fn parse_manual_device_rejects_invalid_ids() {
+        let error = parse_manual_device("ZZZZ", "8501", "", "").unwrap_err();
+        assert_eq!(error.title, "Vendor ID inválido");
+        assert_eq!(error.detail, Some("Use hexadecimal, como 0C45."));
+
+        let error = parse_manual_device("0C45", "ZZZZ", "", "").unwrap_err();
+        assert_eq!(error.title, "Product ID inválido");
+        assert_eq!(error.detail, Some("Use hexadecimal, como 8501."));
+    }
+
+    #[test]
+    fn parse_manual_device_rejects_zero_ids() {
+        let error = parse_manual_device("0000", "8501", "", "").unwrap_err();
+        assert_eq!(error.title, "VID e PID devem ser diferentes de zero");
+        assert_eq!(error.detail, None);
+
+        let error = parse_manual_device("0C45", "0", "", "").unwrap_err();
+        assert_eq!(error.title, "VID e PID devem ser diferentes de zero");
+    }
+
+    #[test]
+    fn parse_manual_device_rejects_negative_interface() {
+        let error = parse_manual_device("0C45", "8501", "-1", "").unwrap_err();
+        assert_eq!(error.title, "Interface inválida");
+        assert_eq!(
+            error.detail,
+            Some("Informe um número inteiro não negativo ou deixe em branco.")
+        );
+    }
+
+    #[test]
+    fn parse_manual_device_rejects_invalid_usage_page() {
+        let error = parse_manual_device("0C45", "8501", "", "XYZ").unwrap_err();
+        assert_eq!(error.title, "Usage page inválido");
+        assert_eq!(
+            error.detail,
+            Some("Use hexadecimal, como FF1C, ou deixe em branco.")
+        );
     }
 }
