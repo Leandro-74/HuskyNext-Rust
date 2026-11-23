@@ -6,7 +6,6 @@ rust-version = "1.88"
 description = "Lighting control for the Husky Sled keyboard on Linux, with an iced interface"
 license = "MIT"
 repository = "https://github.com/Leandro-74/HuskyNext-Rust"
-homepage = "https://github.com/Leandro-74/HuskyNext-Rust"
 readme = "README.md"
 keywords = ["hid", "keyboard", "lighting", "iced", "linux"]
 categories = ["command-line-utilities", "hardware-support", "gui"]
