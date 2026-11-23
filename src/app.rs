@@ -1358,7 +1358,7 @@ impl App {
                 text("Safety and robustness").size(16).font(bold()),
                 bullet("The configuration is written atomically, with permissions restricted to the user."),
                 bullet("Invalid values from the file are sanitized before any send."),
-                bullet("The device is rediscovered on every send; old IDs or interface do not prevent reconnection."),
+                bullet("Discovered devices are cached; the list is refreshed when the path becomes stale or when you scan again."),
                 bullet("The identification test sends static purple (#8835E9) at 100%, instead of promising one color and sending another."),
                 bullet("The recommended udev rule uses TAG+=\"uaccess\" instead of making the device available to everyone with MODE=\"0666\"."),
             ]
