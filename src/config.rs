@@ -315,6 +315,191 @@ mod tests {
     }
 
     #[test]
+    fn serialized_config_has_no_nulls() {
+        let mut config = Config::default();
+        config.set_device(DeviceConfig {
+            vendor_id: 0x0C45,
+            product_id: 0x8501,
+            interface_number: Some(1),
+            usage_page: Some(0xFF1C),
+        });
+        config.set_state(KeyboardState {
+            effect: Effect::Rainbow,
+            brightness: 1,
+            speed: 2,
+            color: Rgb::new(1, 2, 3),
+        });
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(!json.contains("null"), "unexpected null in {json}");
+    }
+
+    #[test]
+    fn empty_config_serializes_to_empty_object() {
+        let json = serde_json::to_string(&Config::default()).unwrap();
+        assert_eq!(json, "{}");
+
+        let config: Config = serde_json::from_str("{}").unwrap();
+        assert!(config.device().is_none());
+        assert_eq!(config.keyboard_state(), KeyboardState::default());
+    }
+
+    #[test]
+    fn legacy_config_with_nulls_is_read() {
+        let raw = r##"{
+            "vendor_id": null,
+            "product_id": null,
+            "interface_number": null,
+            "usage_page": null,
+            "effect": null,
+            "bright": null,
+            "speed": null,
+            "r": null,
+            "g": null,
+            "b": null
+        }"##;
+
+        let config: Config = serde_json::from_str(raw).unwrap();
+        assert!(config.device().is_none());
+        assert_eq!(config.keyboard_state(), KeyboardState::default());
+
+        let raw = r##"{
+            "vendor_id": 3141,
+            "product_id": 34049,
+            "interface_number": -1,
+            "usage_page": null
+        }"##;
+
+        let config: Config = serde_json::from_str(raw).unwrap();
+        assert_eq!(config.device().unwrap().interface_number, None);
+
+        let raw = r##"{
+            "vendor_id": 0,
+            "product_id": 34049
+        }"##;
+
+        let config: Config = serde_json::from_str(raw).unwrap();
+        assert!(config.device().is_none());
+    }
+
+    #[test]
+    fn state_only_config_round_trips() {
+        let (dir, path) = temp_config_path();
+        let mut config = Config::default();
+        config.set_state(KeyboardState {
+            effect: Effect::Breathing,
+            brightness: 2,
+            speed: 3,
+            color: Rgb::new(10, 20, 30),
+        });
+        config.save_to(&path).unwrap();
+
+        let bytes = fs::read(&path).unwrap();
+        let json = String::from_utf8(bytes.clone()).unwrap();
+        assert!(!json.contains("null"));
+        assert!(!json.contains("vendor_id"));
+        assert!(!json.contains("interface_number"));
+
+        let loaded: Config = serde_json::from_slice(&bytes).unwrap();
+        assert!(loaded.device().is_none());
+        assert_eq!(loaded.keyboard_state(), config.keyboard_state());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn forget_then_bind_other_device_has_no_leftovers() {
+        let (dir, path) = temp_config_path();
+        let state = KeyboardState {
+            effect: Effect::Rainbow,
+            brightness: 1,
+            speed: 2,
+            color: Rgb::new(9, 8, 7),
+        };
+
+        let mut config = Config::default();
+        config.set_device(DeviceConfig {
+            vendor_id: 0x0C45,
+            product_id: 0x8501,
+            interface_number: Some(1),
+            usage_page: Some(0xFF1C),
+        });
+        config.set_state(state);
+
+        config.clear_device();
+        assert!(config.device().is_none());
+        assert_eq!(config.keyboard_state(), state);
+
+        let other = DeviceConfig {
+            vendor_id: 0x1234,
+            product_id: 0x5678,
+            interface_number: Some(2),
+            usage_page: Some(0xFF00),
+        };
+        config.set_device(other);
+        assert_eq!(config.device(), Some(other));
+        assert_eq!(config.keyboard_state(), state);
+
+        config.save_to(&path).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let json = String::from_utf8(bytes.clone()).unwrap();
+        assert!(!json.contains("null"));
+
+        let saved: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(saved["vendor_id"], 0x1234);
+        assert_eq!(saved["product_id"], 0x5678);
+        assert_eq!(saved["interface_number"], 2);
+        assert_eq!(saved["usage_page"], 0xFF00);
+
+        let loaded: Config = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(loaded.device(), Some(other));
+        assert_eq!(loaded.keyboard_state(), state);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn forget_then_bind_same_ids_without_interface() {
+        let mut config = Config::default();
+        config.set_device(DeviceConfig {
+            vendor_id: 0x0C45,
+            product_id: 0x8501,
+            interface_number: Some(1),
+            usage_page: Some(0xFF1C),
+        });
+
+        config.clear_device();
+
+        let replacement = DeviceConfig {
+            vendor_id: 0x0C45,
+            product_id: 0x8501,
+            interface_number: None,
+            usage_page: None,
+        };
+        config.set_device(replacement);
+
+        assert_eq!(config.device(), Some(replacement));
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(!json.contains("null"));
+        assert!(!json.contains("interface_number"));
+        assert!(!json.contains("usage_page"));
+    }
+
+    fn temp_config_path() -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "huskynext-config-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = dir.join("config.json");
+        (dir, path)
+    }
+
+    #[test]
     fn save_is_atomic_and_round_trips() {
         let dir = std::env::temp_dir().join(format!(
             "huskynext-config-test-{}-{}",
