@@ -6,9 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::{
-    DEFAULT_SPEED, Effect, KeyboardState, MAX_BRIGHTNESS, MAX_SPEED, MIN_SPEED, Rgb,
-};
+use crate::protocol::{KeyboardState, MAX_BRIGHTNESS, MAX_SPEED, MIN_SPEED};
 
 const CONFIG_DIR_NAME: &str = ".huskynext";
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -100,22 +98,14 @@ impl Config {
     pub fn keyboard_state(&self) -> KeyboardState {
         let defaults = KeyboardState::default();
 
-        KeyboardState {
-            effect: self
-                .effect
-                .and_then(Effect::from_code)
-                .unwrap_or(defaults.effect),
-            brightness: self.bright.unwrap_or(MAX_BRIGHTNESS).min(MAX_BRIGHTNESS),
-            speed: self
-                .speed
-                .unwrap_or(DEFAULT_SPEED)
-                .clamp(MIN_SPEED, MAX_SPEED),
-            color: Rgb::new(
-                self.r.unwrap_or(defaults.color.r),
-                self.g.unwrap_or(defaults.color.g),
-                self.b.unwrap_or(defaults.color.b),
-            ),
-        }
+        KeyboardState::sanitized(
+            self.effect.unwrap_or(defaults.effect.code()),
+            self.bright.unwrap_or(defaults.brightness),
+            self.speed.unwrap_or(defaults.speed),
+            self.r.unwrap_or(defaults.color.r),
+            self.g.unwrap_or(defaults.color.g),
+            self.b.unwrap_or(defaults.color.b),
+        )
     }
 
     pub fn set_state(&mut self, state: KeyboardState) {
@@ -249,6 +239,7 @@ pub fn load_from(path: &Path) -> LoadResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::{DEFAULT_SPEED, Effect, Rgb};
 
     #[test]
     fn parses_legacy_flat_config() {
