@@ -9,43 +9,68 @@ use huskynext::protocol::{
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    match parse_args(&args) {
+        Ok(Command::Help) => {
+            print_help();
+            ExitCode::SUCCESS
+        }
+        Ok(Command::Version) => {
+            println!("huskynext {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
+        Ok(Command::List) => list_devices(),
+        Ok(Command::Test(color)) => send_test(color.as_deref().unwrap_or(CONNECTION_TEST_HEX)),
+        Ok(Command::Gui) => match huskynext::app::run() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Falha ao abrir a interface: {error}");
+                ExitCode::FAILURE
+            }
+        },
+        Err(message) => {
+            eprintln!("{message}");
+            eprintln!();
+            print_help();
+            ExitCode::from(2)
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Command {
+    Gui,
+    List,
+    Test(Option<String>),
+    Help,
+    Version,
+}
+
+fn parse_args(args: &[String]) -> Result<Command, String> {
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        print_help();
-        return ExitCode::SUCCESS;
+        return Ok(Command::Help);
     }
 
     if args.iter().any(|arg| arg == "--version" || arg == "-V") {
-        println!("huskynext {}", env!("CARGO_PKG_VERSION"));
-        return ExitCode::SUCCESS;
+        return Ok(Command::Version);
     }
 
     if args.iter().any(|arg| arg == "--list") {
-        return list_devices();
+        return Ok(Command::List);
     }
 
     if let Some(index) = args.iter().position(|arg| arg == "--test") {
         let color = args
             .get(index + 1)
             .filter(|value| !value.starts_with('-'))
-            .map(String::as_str)
-            .unwrap_or(CONNECTION_TEST_HEX);
-        return send_test(color);
+            .cloned();
+        return Ok(Command::Test(color));
     }
 
     if !args.is_empty() {
-        eprintln!("Argumento desconhecido: {}", args.join(" "));
-        eprintln!();
-        print_help();
-        return ExitCode::from(2);
+        return Err(format!("Argumento desconhecido: {}", args.join(" ")));
     }
 
-    match huskynext::app::run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("Falha ao abrir a interface: {error}");
-            ExitCode::FAILURE
-        }
-    }
+    Ok(Command::Gui)
 }
 
 fn list_devices() -> ExitCode {
@@ -160,4 +185,75 @@ Sem --test, o dispositivo salvo em ~/.huskynext/config.json é usado.
 A configuração e o protocolo não são oficiais e podem variar por firmware.",
         version = env!("CARGO_PKG_VERSION")
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn parse_args_without_arguments_opens_gui() {
+        assert_eq!(parse_args(&[]), Ok(Command::Gui));
+    }
+
+    #[test]
+    fn parse_args_help_wins_over_everything() {
+        assert_eq!(parse_args(&args(&["--help"])), Ok(Command::Help));
+        assert_eq!(parse_args(&args(&["-h"])), Ok(Command::Help));
+        assert_eq!(
+            parse_args(&args(&["--version", "--test", "FF0000", "--help"])),
+            Ok(Command::Help)
+        );
+    }
+
+    #[test]
+    fn parse_args_version_wins_over_list_and_test() {
+        assert_eq!(parse_args(&args(&["--version"])), Ok(Command::Version));
+        assert_eq!(parse_args(&args(&["-V"])), Ok(Command::Version));
+        assert_eq!(
+            parse_args(&args(&["--list", "--test", "FF0000", "--version"])),
+            Ok(Command::Version)
+        );
+    }
+
+    #[test]
+    fn parse_args_list_wins_over_test() {
+        assert_eq!(
+            parse_args(&args(&["--test", "FF0000", "--list"])),
+            Ok(Command::List)
+        );
+    }
+
+    #[test]
+    fn parse_args_test_accepts_optional_hex_color() {
+        assert_eq!(
+            parse_args(&args(&["--test", "00FF88"])),
+            Ok(Command::Test(Some("00FF88".to_string())))
+        );
+        assert_eq!(parse_args(&args(&["--test"])), Ok(Command::Test(None)));
+        assert_eq!(
+            parse_args(&args(&["--test", "-x"])),
+            Ok(Command::Test(None))
+        );
+    }
+
+    #[test]
+    fn parse_args_rejects_unknown_arguments() {
+        assert_eq!(
+            parse_args(&args(&["--bogus"])),
+            Err("Argumento desconhecido: --bogus".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_args_ignores_unknown_arguments_after_test() {
+        assert_eq!(
+            parse_args(&args(&["--test", "00FF88", "--bogus"])),
+            Ok(Command::Test(Some("00FF88".to_string())))
+        );
+    }
 }
