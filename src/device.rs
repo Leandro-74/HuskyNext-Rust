@@ -623,6 +623,47 @@ mod tests {
     }
 
     #[test]
+    fn user_hint_mentions_uaccess_for_permission_errors() {
+        let hint = DeviceError::Permission {
+            vendor_id: 0x0C45,
+            product_id: 0x8501,
+            details: "permission denied".into(),
+        }
+        .user_hint()
+        .unwrap();
+        assert!(hint.contains("uaccess"));
+    }
+
+    #[test]
+    fn user_hint_is_absent_for_not_found() {
+        assert!(DeviceError::NotFound.user_hint().is_none());
+    }
+
+    #[test]
+    fn permission_hint_includes_formatted_ids() {
+        let hint = permission_hint(0x0C45, 0x8501);
+        assert!(hint.contains("0c45"));
+        assert!(hint.contains("8501"));
+        assert!(hint.contains("/etc/udev/rules.d/99-huskynext.rules"));
+    }
+
+    #[test]
+    fn vendor_usage_page_boundaries() {
+        assert!(!is_vendor_usage_page(0xFEFF));
+        assert!(is_vendor_usage_page(0xFF00));
+        assert!(is_vendor_usage_page(0xFFFF));
+        assert!(!is_vendor_usage_page(0x0000));
+    }
+
+    #[test]
+    fn clean_string_trims_and_drops_empty_values() {
+        assert_eq!(clean_string(None), None);
+        assert_eq!(clean_string(Some("")), None);
+        assert_eq!(clean_string(Some("   ")), None);
+        assert_eq!(clean_string(Some("  SONiX  ")), Some("SONiX".to_string()));
+    }
+
+    #[test]
     fn stale_detection_matches_outdated_paths() {
         assert!(DeviceError::NotFound.is_stale());
         assert!(DeviceError::Open("No such file or directory".into()).is_stale());
