@@ -482,13 +482,18 @@ mod tests {
     }
 
     fn temp_config_path() -> (PathBuf, PathBuf) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
         let dir = std::env::temp_dir().join(format!(
-            "huskynext-config-test-{}-{}",
+            "huskynext-config-test-{}-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));
         let path = dir.join("config.json");
         (dir, path)
@@ -610,15 +615,7 @@ mod tests {
 
     #[test]
     fn save_is_atomic_and_round_trips() {
-        let dir = std::env::temp_dir().join(format!(
-            "huskynext-config-test-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let path = dir.join("config.json");
+        let (dir, path) = temp_config_path();
 
         let mut config = Config::default();
         config.set_device(DeviceConfig {
